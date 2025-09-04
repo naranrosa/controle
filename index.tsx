@@ -679,6 +679,22 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                             type: { type: Type.STRING, enum: ["fixo", "variável"] },
                         },
                     },
+                    
+                    transactions: { // Para adicionar MÚLTIPLAS transações
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                flow: { type: Type.STRING, enum: ["income", "expense"] },
+                                description: { type: Type.STRING },
+                                amount: { type: Type.NUMBER },
+                                category: { type: Type.STRING, enum: allCategories },
+                                person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] },
+                                type: { type: Type.STRING, enum: ["fixo", "variável"] },
+                            },
+                        }
+                    },
+                
                     transactionUpdate: {
                         type: Type.OBJECT,
                         properties: {
@@ -713,26 +729,25 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 }
             };
 
-                        const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
-            Histórico de transações recente (as 5 últimas): ${JSON.stringify(transactions.slice(0, 5))}.
-            Metas atuais: ${JSON.stringify(goals)}.
-            Teto de gastos (orçamento) atual: ${JSON.stringify(budgets)}.
+        const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
+            Histórico de transações recente: ${JSON.stringify(transactions.slice(0, 5))}.
 
-            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta entre adicionar, atualizar, excluir ou responder.
-            1.  ADICIONAR: Se o usuário quer registrar algo novo, use 'addTransaction'.
-            2.  ATUALIZAR: Se o usuário quer CORRIGIR, MUDAR, ALTERAR ou EDITAR uma transação existente, use 'updateTransaction'.
-            3.  EXCLUIR: Se o usuário quer REMOVER, APAGAR ou EXCLUIR uma transação, use 'deleteTransaction'.
-            4.  RESPONDER: Se for apenas uma pergunta, use 'answerQuery'.
+            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta.
+            1.  ADICIONAR UMA: Se o usuário quer registrar APENAS UMA transação, use 'addTransaction'.
+            2.  ADICIONAR VÁRIAS: Se o usuário lista MÚLTIPLAS transações na mesma frase (usando "e", "além de", etc.), use 'addMultipleTransactions'.
+            3.  ATUALIZAR: Se o usuário quer CORRIGIR ou EDITAR uma transação, use 'updateTransaction'.
+            4.  EXCLUIR: Se o usuário quer REMOVER ou APAGAR uma transação, use 'deleteTransaction'.
+            5.  RESPONDER: Se for apenas uma pergunta, use 'answerQuery'.
+
+            Exemplos de ADIÇÃO DE VÁRIAS ('addMultipleTransactions'):
+            - "adicione ifood 50 reais e uber 30 reais" -> { action: 'addMultipleTransactions', transactions: [ { description: 'ifood', amount: 50 }, { description: 'uber', amount: 30 } ] }
+            - "lancei 25 de farmácia para a Jussara e 100 de mercado para ambos" -> { action: 'addMultipleTransactions', transactions: [ { description: 'farmácia', amount: 25, person: 'Jussara' }, { description: 'mercado', amount: 100, person: 'Ambos' } ] }
 
             Exemplos de ATUALIZAÇÃO ('updateTransaction'):
-            - "a despesa casa é de ambos" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'casa' }, updates: { person: 'Ambos' } } }
             - "edite o ifood para a categoria alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
-            - "o valor do almoço foi 50 reais na verdade" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'almoço' }, updates: { amount: 50 } } }
 
             Exemplos de EXCLUSÃO ('deleteTransaction'):
             - "exclua a despesa casa" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'casa' } }
-            - "pode remover o lançamento do uber" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'uber' } }
-            - "apague o gasto com farmácia" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'farmácia' } }
 
             Mensagem do usuário: "${input}"`;
 
@@ -745,7 +760,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
-                        switch (responseJson.action) {
+            switch (responseJson.action) {
                 case 'addTransaction':
                     if (responseJson.transaction?.amount && responseJson.transaction?.description) {
                         const t = responseJson.transaction;
@@ -768,6 +783,33 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     }
                     break;
 
+                // NOVO CASE PARA MÚLTIPLAS TRANSAÇÕES
+                case 'addMultipleTransactions':
+                    if (responseJson.transactions && Array.isArray(responseJson.transactions) && responseJson.transactions.length > 0) {
+                        const newTransactionsData = responseJson.transactions.map((t: any) => ({
+                            description: t.description,
+                            amount: t.amount,
+                            flow: t.flow || 'expense',
+                            category: t.category || 'Outros',
+                            person: t.person || currentUser,
+                            type: t.type || 'variável',
+                            date: new Date().toISOString().split('T')[0],
+                            user_id: session.user.id
+                        }));
+
+                        const { data, error } = await supabase.from('transactions').insert(newTransactionsData).select();
+
+                        if (error) {
+                            aiResponseText = "Ocorreu um erro ao salvar as transações.";
+                            console.error(error);
+                        } else if (data) {
+                            setTransactions(prev => [...data, ...prev]);
+                            const summary = data.map(t => `${t.description} (${formatCurrency(t.amount)})`).join(' e ');
+                            aiResponseText = `Ok, adicionei ${data.length} novas transações: ${summary}.`;
+                        }
+                    }
+                    break;
+
                 case 'updateTransaction':
                     if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
                         const { identifier, updates } = responseJson.transactionUpdate;
@@ -775,10 +817,8 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
 
                         if (transactionToUpdate) {
                             const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).select();
-                            if (error) {
-                                aiResponseText = `Erro ao atualizar a transação.`;
-                                console.error(error);
-                            } else if (data) {
+                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); } 
+                            else if (data) {
                                 setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
                                 const changedFields = Object.keys(updates).join(', ');
                                 aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}". O(s) campo(s) '${changedFields}' foi/foram alterado(s).`;
@@ -796,11 +836,8 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
 
                         if (transactionToDelete) {
                             const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
-
-                            if (error) {
-                                aiResponseText = `Erro ao excluir a transação '${description}'.`;
-                                console.error(error);
-                            } else {
+                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); } 
+                            else {
                                 setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
                                 aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída com sucesso.`;
                             }
