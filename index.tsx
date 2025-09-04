@@ -438,54 +438,43 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
         }
     }, [editingTransaction]);
 
-    const handleAddOrUpdateTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
+    // Dentro do componente Transactions
+const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget; // SOLUÇÃO: Salva a referência do formulário aqui!
+    const formData = new FormData(form);
+    const name = formData.get('name') as string;
+    const targetAmount = parseFloat(formData.get('amount') as string);
 
-        const transactionData = {
-            description: formData.get('description') as string,
-            amount: parseFloat(formData.get('amount') as string),
-            category: formData.get('category') as string,
-            person: formData.get('person') as 'Natan' | 'Jussara' | 'Ambos',
-            type: formData.get('type') as 'fixo' | 'variável',
-            flow: flow,
-            date: editingTransaction ? editingTransaction.date : new Date().toISOString().split('T')[0], // Mantém a data original na edição
-            user_id: session.user.id,
-        };
-
-        if (editingTransaction) {
-            // Lógica de ATUALIZAÇÃO
-            const { data, error } = await supabase
-                .from('transactions')
-                .update(transactionData)
-                .eq('id', editingTransaction.id)
-                .select();
-
-            if (error) {
-                console.error('Error updating transaction:', error);
-                alert('Erro ao atualizar a transação.');
-            } else if (data) {
-                setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? data[0] : t));
-                alert('Transação atualizada com sucesso!');
-                setEditingTransaction(null); // Limpa o estado de edição
-                e.currentTarget.reset();
-            }
-        } else {
-            // Lógica de CRIAÇÃO (original)
-            const { data, error } = await supabase
-                .from('transactions')
-                .insert([transactionData])
-                .select();
-
-            if (error) {
-                console.error('Error adding transaction:', error);
-                alert('Erro ao adicionar transação.');
-            } else if (data) {
-                setTransactions(prev => [data[0], ...prev]);
-                e.currentTarget.reset();
-            }
+    if (editingGoal) {
+        // Lógica de Atualização
+        const { data, error } = await supabase
+            .from('goals')
+            .update({ name, targetAmount })
+            .eq('id', editingGoal.id)
+            .select();
+        
+        if (error) {
+            console.error("Error updating goal:", error);
+        } else if (data) {
+            setGoals(goals.map(g => g.id === editingGoal.id ? data[0] : g));
+            setEditingGoal(null);
         }
-    };
+    } else {
+        // Lógica de Adição
+        const { data, error } = await supabase
+            .from('goals')
+            .insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }])
+            .select();
+
+        if (error) {
+            console.error("Error adding goal:", error);
+        } else if (data) {
+            setGoals(prev => [...prev, data[0]]);
+        }
+    }
+    form.reset(); // Usa a referência salva
+};
 
     const handleDeleteTransaction = async (transactionId: string) => {
         if (window.confirm("Tem certeza que deseja excluir este lançamento?")) {
@@ -840,41 +829,42 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
     }, [transactions]);
 
     const addBudget = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        const category = formData.get('category') as string;
-        const amount = parseFloat(formData.get('amount') as string);
+    e.preventDefault();
+    const form = e.currentTarget; // SOLUÇÃO: Salva a referência do formulário aqui!
+    const formData = new FormData(form);
+    const category = formData.get('category') as string;
+    const amount = parseFloat(formData.get('amount') as string);
 
-        const existingBudget = budgets.find(b => b.category === category);
+    const existingBudget = budgets.find(b => b.category === category);
 
-        if (existingBudget) {
-            // Update
-            const { data, error } = await supabase
-                .from('budgets')
-                .update({ amount })
-                .eq('id', existingBudget.id)
-                .select();
+    if (existingBudget) {
+        // Update
+        const { data, error } = await supabase
+            .from('budgets')
+            .update({ amount })
+            .eq('id', existingBudget.id)
+            .select();
 
-            if (error) {
-                console.error("Error updating budget:", error);
-            } else if (data) {
-                setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
-            }
-        } else {
-            // Insert
-            const { data, error } = await supabase
-                .from('budgets')
-                .insert([{ category, amount, user_id: session.user.id }])
-                .select();
-
-            if (error) {
-                console.error("Error adding budget:", error);
-            } else if (data) {
-                setBudgets([...budgets, data[0]]);
-            }
+        if (error) {
+            console.error("Error updating budget:", error);
+        } else if (data) {
+            setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
         }
-        e.currentTarget.reset();
-    };
+    } else {
+        // Insert
+        const { data, error } = await supabase
+            .from('budgets')
+            .insert([{ category, amount, user_id: session.user.id }])
+            .select();
+
+        if (error) {
+            console.error("Error adding budget:", error);
+        } else if (data) {
+            setBudgets([...budgets, data[0]]);
+        }
+    }
+    form.reset(); // Usa a referência salva
+};
 
     const handleDeleteBudget = async (budgetId: string) => {
         if (window.confirm("Tem certeza que deseja remover este teto de gastos?")) {
