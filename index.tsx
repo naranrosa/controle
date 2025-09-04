@@ -660,18 +660,19 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-            const responseSchema = {
+                        const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
                         type: Type.STRING,
-                        enum: ["addTransaction", "answerQuery", "addGoal", "updateGoal", "deleteGoal", "addBudget", "updateBudget", "deleteBudget"],
+                        // ADICIONAMOS 'updateTransaction' AQUI
+                        enum: ["addTransaction", "updateTransaction", "answerQuery", "addGoal", "updateGoal", "deleteGoal", "addBudget", "updateBudget", "deleteBudget"],
                         description: "A ação a ser tomada."
                     },
-                    transaction: {
+                    transaction: { // Usado para ADICIONAR uma nova transação
                         type: Type.OBJECT,
                         properties: {
-                            flow: { type: Type.STRING, enum: ["income", "expense"], description: "Indica se é uma entrada (income) ou saída (expense) de dinheiro." },
+                            flow: { type: Type.STRING, enum: ["income", "expense"] },
                             description: { type: Type.STRING },
                             amount: { type: Type.NUMBER },
                             category: { type: Type.STRING, enum: allCategories },
@@ -679,19 +680,49 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                             type: { type: Type.STRING, enum: ["fixo", "variável"] },
                         },
                     },
+                    // NOVA PROPRIEDADE PARA ATUALIZAR TRANSAÇÕES
+                    transactionUpdate: {
+                        type: Type.OBJECT,
+                        properties: {
+                            identifier: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    description: { type: Type.STRING, description: "A descrição da transação a ser atualizada. Ex: 'Taxa casa'" }
+                                }
+                            },
+                            updates: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    amount: { type: Type.NUMBER },
+                                    category: { type: Type.STRING, enum: allCategories },
+                                    person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] },
+                                    description: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        description: "Objeto usado para atualizar uma transação existente."
+                    },
                     goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
                     budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário." }
                 }
             };
 
-            const prompt = `Contexto: Você é um assistente financeiro para um casal. Quem está falando é um dos membros do casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
-            Histórico de transações recente: ${JSON.stringify(transactions.slice(0, 5))}.
+            const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
+            Histórico de transações recente (as 5 últimas): ${JSON.stringify(transactions.slice(0, 5))}.
             Metas atuais: ${JSON.stringify(goals)}.
             Teto de gastos (orçamento) atual: ${JSON.stringify(budgets)}.
-            Tarefa: Analise a mensagem do usuário e decida a ação. Você pode adicionar uma transação, adicionar/editar/excluir uma meta ou um teto de gastos, ou responder a uma pergunta.
-            - Para transações, se a pessoa não for especificada, assuma um valor padrão (Natan ou Jussara).
-            - Teto de gasto é o mesmo que 'budget' ou 'orçamento'.
+
+            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta.
+            1.  Se o usuário quer REGISTRAR uma nova despesa ou receita, use a ação 'addTransaction'.
+            2.  Se o usuário quer CORRIGIR, MUDAR ou ALTERAR uma transação que acabou de mencionar ou que está no histórico recente, use a ação 'updateTransaction'. Para identificar a transação a ser alterada, use a descrição dela. No campo 'updates', forneça APENAS os campos que devem ser alterados.
+            3.  Se o usuário está apenas fazendo uma pergunta ou conversando, use a ação 'answerQuery' para responder de forma amigável.
+
+            Exemplos de como usar a ação de atualização ('updateTransaction'):
+            - Mensagem: "a despesa casa é de ambos" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'casa' }, updates: { person: 'Ambos' } } }
+            - Mensagem: "o valor do almoço foi 50 reais na verdade" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'almoço' }, updates: { amount: 50 } } }
+            - Mensagem: "mude a categoria do ifood para alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
+
             Mensagem do usuário: "${input}"`;
 
             const result = await ai.models.generateContent({
