@@ -68,3 +68,72 @@
         padding: 1.5rem 2rem !important;
     }
 }
+
+/* =============================================== */
+/* === ESTILOS PARA LAYOUT DESKTOP (SIDEBAR) === */
+/* =============================================== */
+
+/* Aplica estas regras apenas em telas com 768px de largura ou mais */
+@media (min-width: 768px) {
+  
+  /* 1. Define o layout principal com a sidebar à esquerda e o conteúdo à direita */
+  .app-layout {
+    display: flex;
+  }
+
+  /* 2. Transforma a barra de navegação inferior em um menu lateral (sidebar) */
+  .app-nav {
+    /* Sobrescreve os estilos inline do React para a posição */
+    position: static !important;
+    
+    /* Organiza os botões verticalmente */
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+
+    /* Define o tamanho e a aparência da sidebar */
+    width: 240px; /* Largura fixa para a sidebar */
+    height: 100vh; /* Ocupa a altura total da tela */
+    border-top: none; /* Remove a borda de cima da versão mobile */
+    border-right: 1px solid var(--border-color); /* Adiciona uma borda na lateral */
+    
+    /* Remove e ajusta estilos da versão mobile */
+    max-width: none;
+    margin: 0;
+    padding: 1rem 0; /* Adiciona um espaçamento vertical */
+  }
+
+  /* 3. Ajusta o container do conteúdo principal */
+  .main-content-wrapper {
+    flex: 1; /* Faz o conteúdo ocupar todo o espaço restante */
+    height: 100vh; /* Ocupa a altura total da tela */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Previne barras de rolagem duplas */
+  }
+
+  .app-main {
+     padding-bottom: 1rem !important; /* Remove o padding extra da versão mobile */
+  }
+  
+  /* 4. Ajusta a aparência dos botões dentro da sidebar */
+  .nav-item-btn {
+    display: flex;
+    flex: none; /* Impede que o botão se estique */
+    flex-direction: row; /* Alinha ícone e texto lado a lado */
+    align-items: center;
+    justify-content: flex-start; /* Alinha o conteúdo à esquerda */
+    gap: 1rem; /* Espaço entre o ícone e o texto */
+    
+    width: calc(100% - 2rem); /* Largura do botão */
+    margin: 0.25rem 1rem; /* Margem para espaçamento */
+    padding: 0.75rem 1rem !important; /* Aumenta a área de clique */
+  }
+
+  /* 5. Garante que o texto do botão (label) sempre apareça */
+  .nav-label {
+    display: block !important;
+    font-size: 1rem !important; /* Aumenta um pouco a fonte */
+    margin-top: 0; /* Remove a margem da versão mobile */
+  }
+}
