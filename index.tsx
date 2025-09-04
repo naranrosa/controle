@@ -425,64 +425,158 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
 
 const Transactions = ({ setTransactions, currentUser, allSortedTransactions, session }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, currentUser: User, allSortedTransactions: Transaction[], session: Session }) => {
     const [flow, setFlow] = useState<'expense' | 'income'>('expense');
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-    const addTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
+    // Efeito para mudar o 'flow' (receita/despesa) quando uma transação é selecionada para edição
+    useEffect(() => {
+        if (editingTransaction) {
+            setFlow(editingTransaction.flow);
+        }
+    }, [editingTransaction]);
+
+    const handleAddOrUpdateTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
 
-        const newTransactionData = {
+        const transactionData = {
             description: formData.get('description') as string,
             amount: parseFloat(formData.get('amount') as string),
             category: formData.get('category') as string,
             person: formData.get('person') as 'Natan' | 'Jussara' | 'Ambos',
             type: formData.get('type') as 'fixo' | 'variável',
             flow: flow,
-            date: new Date().toISOString().split('T')[0],
-            user_id: session.user.id, // Adiciona o ID do usuário
+            date: editingTransaction ? editingTransaction.date : new Date().toISOString().split('T')[0], // Mantém a data original na edição
+            user_id: session.user.id,
         };
 
-        const { data, error } = await supabase
-            .from('transactions')
-            .insert([newTransactionData])
-            .select();
+        if (editingTransaction) {
+            // Lógica de ATUALIZAÇÃO
+            const { data, error } = await supabase
+                .from('transactions')
+                .update(transactionData)
+                .eq('id', editingTransaction.id)
+                .select();
 
-        if (error) {
-            console.error('Error adding transaction:', error);
-            alert('Erro ao adicionar transação.');
-        } else if (data) {
-            setTransactions(prev => [data[0], ...prev]);
-            e.currentTarget.reset();
+            if (error) {
+                console.error('Error updating transaction:', error);
+                alert('Erro ao atualizar a transação.');
+            } else if (data) {
+                setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? data[0] : t));
+                alert('Transação atualizada com sucesso!');
+                setEditingTransaction(null); // Limpa o estado de edição
+                e.currentTarget.reset();
+            }
+        } else {
+            // Lógica de CRIAÇÃO (original)
+            const { data, error } = await supabase
+                .from('transactions')
+                .insert([transactionData])
+                .select();
+
+            if (error) {
+                console.error('Error adding transaction:', error);
+                alert('Erro ao adicionar transação.');
+            } else if (data) {
+                setTransactions(prev => [data[0], ...prev]);
+                e.currentTarget.reset();
+            }
         }
+    };
+
+    const handleDeleteTransaction = async (transactionId: string) => {
+        if (window.confirm("Tem certeza que deseja excluir este lançamento?")) {
+            const { error } = await supabase
+                .from('transactions')
+                .delete()
+                .eq('id', transactionId);
+
+            if (error) {
+                console.error('Error deleting transaction:', error);
+                alert('Erro ao excluir o lançamento.');
+            } else {
+                setTransactions(prev => prev.filter(t => t.id !== transactionId));
+            }
+        }
+    };
+    
+    // Função para iniciar a edição de uma transação
+    const handleSetEditing = (transaction: Transaction) => {
+        setEditingTransaction(transaction);
+        window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola a tela para o topo para ver o formulário
     };
 
     const currentCategories = flow === 'expense' ? expenseCategories : incomeCategories;
 
     return (
         <div style={styles.page}>
-            <h2 style={styles.pageTitle}>Adicionar Lançamento</h2>
+            <h2 style={styles.pageTitle}>{editingTransaction ? 'Editar Lançamento' : 'Adicionar Lançamento'}</h2>
             <div style={styles.card}>
                 <div style={styles.toggleContainer}>
                     <button onClick={() => setFlow('expense')} style={flow === 'expense' ? styles.toggleButtonActive : styles.toggleButton}>Despesa</button>
                     <button onClick={() => setFlow('income')} style={flow === 'income' ? styles.toggleButtonActive : styles.toggleButton}>Receita</button>
                 </div>
-                <form onSubmit={addTransaction} style={styles.form}>
-                    <input style={styles.input} name="description" placeholder="Descrição" required />
-                    <input style={styles.input} name="amount" type="number" step="0.01" placeholder="Valor (R$)" required />
-                    <select style={styles.input} name="category" required>
+                <form 
+                    key={editingTransaction ? editingTransaction.id : 'new-transaction'} // Chave para forçar o formulário a resetar com novos valores padrão
+                    onSubmit={handleAddOrUpdateTransaction} 
+                    style={styles.form}
+                >
+                    <input 
+                        style={styles.input} 
+                        name="description" 
+                        placeholder="Descrição" 
+                        required 
+                        defaultValue={editingTransaction?.description || ''}
+                    />
+                    <input 
+                        style={styles.input} 
+                        name="amount" 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="Valor (R$)" 
+                        required 
+                        defaultValue={editingTransaction?.amount || ''}
+                    />
+                    <select 
+                        style={styles.input} 
+                        name="category" 
+                        required 
+                        defaultValue={editingTransaction?.category || currentCategories[0]}
+                    >
                         {currentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={styles.grid}>
-                        <select style={styles.input} name="person" required defaultValue={currentUser}>
+                        <select 
+                            style={styles.input} 
+                            name="person" 
+                            required 
+                            defaultValue={editingTransaction?.person || currentUser}
+                        >
                             <option value="Natan">Natan</option>
                             <option value="Jussara">Jussara</option>
                             <option value="Ambos">Ambos</option>
                         </select>
-                        <select style={styles.input} name="type" required>
+                        <select 
+                            style={styles.input} 
+                            name="type" 
+                            required
+                            defaultValue={editingTransaction?.type || 'variável'}
+                        >
                             <option value="variável">Variável</option>
                             <option value="fixo">Fixo</option>
                         </select>
                     </div>
-                    <button type="submit" style={styles.button}>Adicionar</button>
+                    <button type="submit" style={styles.button}>
+                        {editingTransaction ? 'Salvar Alterações' : 'Adicionar'}
+                    </button>
+                    {editingTransaction && (
+                        <button 
+                            type="button" 
+                            onClick={() => setEditingTransaction(null)} 
+                            style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}
+                        >
+                            Cancelar Edição
+                        </button>
+                    )}
                 </form>
             </div>
             <h2 style={{...styles.pageTitle, marginTop: '2rem'}}>Histórico Completo</h2>
@@ -493,9 +587,15 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                             <span style={styles.transactionDesc}>{t.description} {t.type === 'fixo' && <span style={{color: 'var(--text-light)'}}>{Icons.pin}</span>}</span>
                             <span style={styles.transactionSub}>{t.person} · {t.category} · {formatDate(t.date)}</span>
                         </div>
-                        <span style={{...styles.transactionAmount, color: t.flow === 'income' ? 'var(--success-color)' : 'var(--danger-color)'}}>
-                            {t.flow === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                        </span>
+                        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem'}}>
+                             <span style={{...styles.transactionAmount, color: t.flow === 'income' ? 'var(--success-color)' : 'var(--danger-color)'}}>
+                                {t.flow === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                            </span>
+                            <div style={{display: 'flex', gap: '0.5rem'}}>
+                                <button onClick={() => handleSetEditing(t)} style={{...styles.button, fontSize: '0.7rem', padding: '0.25rem 0.75rem', background: 'var(--secondary-color)', minWidth: '60px'}}>Editar</button>
+                                <button onClick={() => handleDeleteTransaction(t.id)} style={{...styles.button, fontSize: '0.7rem', padding: '0.25rem 0.75rem', background: 'var(--danger-color)', minWidth: '60px'}}>Excluir</button>
+                            </div>
+                        </div>
                     </div>
                 ))}
             </div>
