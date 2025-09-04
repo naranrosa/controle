@@ -163,9 +163,19 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
 };
 
 const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
+
+    // Função para extrair e formatar o nome a partir do e-mail
+    const getDisplayName = (email: string) => {
+        if (!email) return ''; // Retorna vazio se não houver e-mail
+        const name = email.split('@')[0]; // Pega a parte antes do @
+        return name.charAt(0).toUpperCase() + name.slice(1); // Capitaliza a primeira letra
+    };
+
+    const displayName = getDisplayName(userEmail);
+
     return (
         <header style={styles.header}>
-            <span style={styles.headerWelcome}>Olá, <strong>{userEmail}</strong>!</span>
+            <span style={styles.headerWelcome}>Olá, <strong>{displayName}</strong>!</span>
             <div>
                  <button onClick={toggleTheme} style={styles.themeToggleButton}>
                     {theme === 'light' ? Icons.moon : Icons.sun}
