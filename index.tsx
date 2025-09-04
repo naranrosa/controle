@@ -7,7 +7,6 @@ import { ThemeSupa } from '@supabase/auth-ui-shared';
 
 
 // --- SUPABASE CLIENT SETUP ---
-// É uma boa prática colocar isso em um arquivo separado (ex: supabaseClient.ts)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -19,14 +18,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // --- TYPES AND INTERFACES ---
 interface Transaction {
   id: string; // UUID from Supabase
-  person: 'Natan' | 'Jussara' | 'Ambos';
+  person: string; // Agora é uma string dinâmica (ex: 'Natan', 'Jussara')
   category: string;
   type: 'fixo' | 'variável';
   flow: 'income' | 'expense';
   amount: number;
   date: string; // YYYY-MM-DD
   description: string;
-  user_id?: string; // Foreign key to auth.users
+  family_id?: string; // Foreign key to families
 }
 
 interface Goal {
@@ -34,14 +33,14 @@ interface Goal {
   name: string;
   targetAmount: number;
   currentAmount: number;
-  user_id?: string;
+  family_id?: string;
 }
 
 interface Budget {
     id: string; // UUID from Supabase
     category: string;
     amount: number;
-    user_id?: string;
+    family_id?: string;
 }
 
 interface ChatMessage {
@@ -51,16 +50,18 @@ interface ChatMessage {
     isLoading?: boolean;
 }
 
-// O tipo 'User' agora se refere a quem está usando a UI, não ao objeto de autenticação
-type User = 'Natan' | 'Jussara';
+// Interface para os membros da família
+interface FamilyMember {
+  id: string; // user_id (uuid from auth.users)
+  display_name: string;
+}
+
 type Theme = 'light' | 'dark';
 
 
 // --- API INITIALIZATION ---
 let ai;
 try {
-    // ATENÇÃO: Expor chaves de API no lado do cliente é inseguro para produção.
-    // O ideal é fazer chamadas para um backend seu que então se comunica com a GenAI API.
     ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 } catch (error) {
     console.error("Failed to initialize GoogleGenAI:", error);
@@ -74,7 +75,7 @@ const formatCurrency = (value: number) => {
 const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-        .toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        .toLocaleDateDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 const formatMonthYear = (date: Date) => {
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -144,7 +145,7 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
                         theme={theme === 'dark' ? 'dark' : 'default'}
                         view="sign_in"
                         showLinks={false}
-                        providers={[]} // <--- ESTA É A CORREÇÃO PRINCIPAL
+                        providers={[]}
                         localization={{
                             variables: {
                                 sign_in: {
@@ -164,12 +165,10 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
 };
 
 const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
-
-    // Função para extrair e formatar o nome a partir do e-mail
     const getDisplayName = (email: string) => {
-        if (!email) return ''; // Retorna vazio se não houver e-mail
-        const name = email.split('@')[0]; // Pega a parte antes do @
-        return name.charAt(0).toUpperCase() + name.slice(1); // Capitaliza a primeira letra
+        if (!email) return '';
+        const name = email.split('@')[0];
+        return name.charAt(0).toUpperCase() + name.slice(1);
     };
 
     const displayName = getDisplayName(userEmail);
@@ -187,7 +186,7 @@ const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string
     );
 };
 
-const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { transactions: Transaction[], goals: Goal[], currentDate: Date, setCurrentDate: React.Dispatch<React.SetStateAction<Date>> }) => {
+const Dashboard = ({ transactions, goals, familyMembers, currentDate, setCurrentDate }: { transactions: Transaction[], goals: Goal[], familyMembers: FamilyMember[], currentDate: Date, setCurrentDate: React.Dispatch<React.SetStateAction<Date>> }) => {
     const { totalIncome, totalExpenses, netBalance } = useMemo(() => {
         const income = transactions.filter(t => t.flow === 'income').reduce((sum, t) => sum + t.amount, 0);
         const expenses = transactions.filter(t => t.flow === 'expense').reduce((sum, t) => sum + t.amount, 0);
@@ -217,26 +216,31 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
 
     const recentTransactions = useMemo(() => transactions.slice(0, 3), [transactions]);
 
-    const { natanExpenses, jussaraExpenses } = useMemo(() => {
-    let natanTotal = 0;
-    let jussaraTotal = 0;
-    transactions
-        .filter(t => t.flow === 'expense') // 1. Pega apenas as despesas
-        .forEach(t => {
-            // 2. Soma apenas se a pessoa for EXATAMENTE 'Natan'
-            if (t.person === 'Natan') {
-                natanTotal += t.amount;
+    const individualExpenses = useMemo(() => {
+        const member1 = familyMembers[0];
+        const member2 = familyMembers[1];
 
-            // 3. Soma apenas se a pessoa for EXATAMENTE 'Jussara'
-            } else if (t.person === 'Jussara') {
-                jussaraTotal += t.amount;
-            }
-            // 4. Note que não há um 'else' ou 'else if' para 'Ambos'.
-            // Portanto, essas transações são ignoradas neste cálculo.
-        });
-    return { natanExpenses: natanTotal, jussaraExpenses: jussaraTotal };
-}, [transactions]);
+        const expenses = {
+            [member1?.display_name || 'Pessoa 1']: 0,
+            [member2?.display_name || 'Pessoa 2']: 0,
+        };
 
+        transactions
+            .filter(t => t.flow === 'expense')
+            .forEach(t => {
+                if (t.person === member1?.display_name) {
+                    expenses[member1.display_name] += t.amount;
+                } else if (t.person === member2?.display_name) {
+                    expenses[member2.display_name] += t.amount;
+                }
+            });
+        return expenses;
+    }, [transactions, familyMembers]);
+
+    const member1Name = familyMembers[0]?.display_name || 'Pessoa 1';
+    const member2Name = familyMembers[1]?.display_name || 'Pessoa 2';
+    const member1Expenses = individualExpenses[member1Name];
+    const member2Expenses = individualExpenses[member2Name];
 
     return (
         <div style={styles.page}>
@@ -274,16 +278,20 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
             <div style={styles.card}>
                 <p style={styles.cardLabel}>Gastos Individuais</p>
                 <div style={styles.individualSpendingContainer}>
-                    <div style={styles.individualSpendingItem}>
-                        <span>Natan</span>
-                        {natanExpenses > jussaraExpenses && <span style={styles.spendingTag}>Gastou mais</span>}
-                        <strong>{formatCurrency(natanExpenses)}</strong>
-                    </div>
-                     <div style={styles.individualSpendingItem}>
-                        <span>Jussara</span>
-                        {jussaraExpenses > natanExpenses && <span style={styles.spendingTag}>Gastou mais</span>}
-                        <strong>{formatCurrency(jussaraExpenses)}</strong>
-                    </div>
+                    {familyMembers.length > 0 && (
+                        <>
+                            <div style={styles.individualSpendingItem}>
+                                <span>{member1Name}</span>
+                                {member1Expenses > member2Expenses && <span style={styles.spendingTag}>Gastou mais</span>}
+                                <strong>{formatCurrency(member1Expenses)}</strong>
+                            </div>
+                            <div style={styles.individualSpendingItem}>
+                                <span>{member2Name}</span>
+                                {member2Expenses > member1Expenses && <span style={styles.spendingTag}>Gastou mais</span>}
+                                <strong>{formatCurrency(member2Expenses)}</strong>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -325,9 +333,14 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
     );
 };
 
-const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, session: Session, currentUser: User }) => {
+const MultipleTransactions = ({ setTransactions, familyId, familyMembers }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, familyId: string | null, familyMembers: FamilyMember[] }) => {
     const [inputText, setInputText] = useState('');
-    const [parsedTransactions, setParsedTransactions] = useState<Omit<Transaction, 'id' | 'user_id' | 'date'>[]>([]);
+    const [parsedTransactions, setParsedTransactions] = useState<Omit<Transaction, 'id' | 'family_id' | 'date'>[]>([]);
+
+    const personOptions = useMemo(() => {
+        const names = familyMembers.map(member => member.display_name);
+        return [...names, 'Ambos'];
+    }, [familyMembers]);
 
     const handleParseText = () => {
         const lines = inputText.split('\n').filter(line => line.trim() !== '');
@@ -341,31 +354,31 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
                 return {
                     description,
                     amount,
-                    category: 'Outros', // Valor padrão
-                    person: 'Ambos',   // Valor padrão
-                    type: 'variável', // Valor padrão
+                    category: 'Outros',
+                    person: 'Ambos',
+                    type: 'variável' as 'variável',
                     flow: 'expense' as 'expense',
                 };
             }
             return null;
-        }).filter(item => item !== null) as Omit<Transaction, 'id' | 'user_id' | 'date'>[];
+        }).filter(item => item !== null) as Omit<Transaction, 'id' | 'family_id' | 'date'>[];
 
         setParsedTransactions(newParsed);
     };
 
-    const handleUpdateField = (index: number, field: keyof Omit<Transaction, 'id' | 'user_id' | 'date' | 'description' | 'amount' | 'flow'>, value: any) => {
+    const handleUpdateField = (index: number, field: keyof Omit<Transaction, 'id' | 'family_id' | 'date' | 'description' | 'amount' | 'flow'>, value: any) => {
         const updated = [...parsedTransactions];
         updated[index] = { ...updated[index], [field]: value };
         setParsedTransactions(updated);
     };
 
     const handleSubmitAll = async () => {
-        if (parsedTransactions.length === 0) return;
+        if (parsedTransactions.length === 0 || !familyId) return;
 
         const transactionsToInsert = parsedTransactions.map(t => ({
             ...t,
             date: new Date().toISOString().split('T')[0],
-            user_id: session.user.id,
+            family_id: familyId,
         }));
 
         const { data, error } = await supabase
@@ -409,9 +422,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
                                     {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                 </select>
                                 <select style={styles.input} value={t.person} onChange={(e) => handleUpdateField(index, 'person', e.target.value)}>
-                                    <option value="Natan">Natan</option>
-                                    <option value="Jussara">Jussara</option>
-                                    <option value="Ambos">Ambos</option>
+                                    {personOptions.map(name => <option key={name} value={name}>{name}</option>)}
                                 </select>
                                 <select style={styles.input} value={t.type} onChange={(e) => handleUpdateField(index, 'type', e.target.value)}>
                                     <option value="variável">Variável</option>
@@ -427,9 +438,20 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
     );
 };
 
-const Transactions = ({ setTransactions, currentUser, allSortedTransactions, session }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, currentUser: User, allSortedTransactions: Transaction[], session: Session }) => {
+const Transactions = ({ setTransactions, allSortedTransactions, session, familyId, familyMembers }: {
+    setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>,
+    allSortedTransactions: Transaction[],
+    session: Session,
+    familyId: string | null,
+    familyMembers: FamilyMember[]
+}) => {
     const [flow, setFlow] = useState<'expense' | 'income'>('expense');
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+    const personOptions = useMemo(() => {
+        const names = familyMembers.map(member => member.display_name);
+        return [...names, 'Ambos'];
+    }, [familyMembers]);
 
     useEffect(() => {
         if (editingTransaction) {
@@ -439,18 +461,21 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
 
     const handleAddOrUpdateTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
-        const formData = new FormData(form);
+        if (!familyId) {
+            alert('Erro: ID da família não encontrado. Tente relogar.');
+            return;
+        }
+        const formData = new FormData(e.currentTarget);
 
         const transactionData = {
             description: formData.get('description') as string,
             amount: parseFloat(formData.get('amount') as string),
             category: formData.get('category') as string,
-            person: formData.get('person') as 'Natan' | 'Jussara' | 'Ambos',
+            person: formData.get('person') as string,
             type: formData.get('type') as 'fixo' | 'variável',
             flow: flow,
             date: editingTransaction ? editingTransaction.date : new Date().toISOString().split('T')[0],
-            user_id: session.user.id,
+            family_id: familyId,
         };
 
         if (editingTransaction) {
@@ -458,6 +483,7 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                 .from('transactions')
                 .update(transactionData)
                 .eq('id', editingTransaction.id)
+                .eq('family_id', familyId)
                 .select();
 
             if (error) {
@@ -467,7 +493,7 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                 setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? data[0] : t));
                 alert('Transação atualizada com sucesso!');
                 setEditingTransaction(null);
-                form.reset(); // Usa a referência salva
+                e.currentTarget.reset();
             }
         } else {
             const { data, error } = await supabase
@@ -480,7 +506,7 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                 alert('Erro ao adicionar transação.');
             } else if (data) {
                 setTransactions(prev => [data[0], ...prev]);
-                form.reset(); // Usa a referência salva
+                e.currentTarget.reset();
             }
         }
     };
@@ -490,7 +516,8 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
             const { error } = await supabase
                 .from('transactions')
                 .delete()
-                .eq('id', transactionId);
+                .eq('id', transactionId)
+                .eq('family_id', familyId);
 
             if (error) {
                 console.error('Error deleting transaction:', error);
@@ -500,13 +527,14 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
             }
         }
     };
-    
+
     const handleSetEditing = (transaction: Transaction) => {
         setEditingTransaction(transaction);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const currentCategories = flow === 'expense' ? expenseCategories : incomeCategories;
+    const loggedInUser = familyMembers.find(m => m.id === session.user.id);
 
     return (
         <div style={styles.page}>
@@ -516,49 +544,47 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                     <button onClick={() => setFlow('expense')} style={flow === 'expense' ? styles.toggleButtonActive : styles.toggleButton}>Despesa</button>
                     <button onClick={() => setFlow('income')} style={flow === 'income' ? styles.toggleButtonActive : styles.toggleButton}>Receita</button>
                 </div>
-                <form 
+                <form
                     key={editingTransaction ? editingTransaction.id : 'new-transaction'}
-                    onSubmit={handleAddOrUpdateTransaction} 
+                    onSubmit={handleAddOrUpdateTransaction}
                     style={styles.form}
                 >
-                    <input 
-                        style={styles.input} 
-                        name="description" 
-                        placeholder="Descrição" 
-                        required 
+                    <input
+                        style={styles.input}
+                        name="description"
+                        placeholder="Descrição"
+                        required
                         defaultValue={editingTransaction?.description || ''}
                     />
-                    <input 
-                        style={styles.input} 
-                        name="amount" 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="Valor (R$)" 
-                        required 
+                    <input
+                        style={styles.input}
+                        name="amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="Valor (R$)"
+                        required
                         defaultValue={editingTransaction?.amount || ''}
                     />
-                    <select 
-                        style={styles.input} 
-                        name="category" 
-                        required 
+                    <select
+                        style={styles.input}
+                        name="category"
+                        required
                         defaultValue={editingTransaction?.category || currentCategories[0]}
                     >
                         {currentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={styles.grid}>
-                        <select 
-                            style={styles.input} 
-                            name="person" 
-                            required 
-                            defaultValue={editingTransaction?.person || currentUser}
+                        <select
+                            style={styles.input}
+                            name="person"
+                            required
+                            defaultValue={editingTransaction?.person || loggedInUser?.display_name}
                         >
-                            <option value="Natan">Natan</option>
-                            <option value="Jussara">Jussara</option>
-                            <option value="Ambos">Ambos</option>
+                            {personOptions.map(name => <option key={name} value={name}>{name}</option>)}
                         </select>
-                        <select 
-                            style={styles.input} 
-                            name="type" 
+                        <select
+                            style={styles.input}
+                            name="type"
                             required
                             defaultValue={editingTransaction?.type || 'variável'}
                         >
@@ -570,9 +596,9 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                         {editingTransaction ? 'Salvar Alterações' : 'Adicionar'}
                     </button>
                     {editingTransaction && (
-                        <button 
-                            type="button" 
-                            onClick={() => setEditingTransaction(null)} 
+                        <button
+                            type="button"
+                            onClick={() => setEditingTransaction(null)}
                             style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}
                         >
                             Cancelar Edição
@@ -684,7 +710,7 @@ const Reports = ({ transactions, currentDate, setCurrentDate }: { transactions: 
     );
 };
 
-const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setGoals: React.Dispatch<React.SetStateAction<Goal[]>>, transactions: Transaction[], session: Session }) => {
+const Goals = ({ goals, setGoals, transactions, familyId }: { goals: Goal[], setGoals: React.Dispatch<React.SetStateAction<Goal[]>>, transactions: Transaction[], familyId: string | null }) => {
     const [aiSuggestion, setAiSuggestion] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -712,8 +738,9 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
 
     const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
-        const formData = new FormData(form);
+        if (!familyId) return;
+
+        const formData = new FormData(e.currentTarget);
         const name = formData.get('name') as string;
         const targetAmount = parseFloat(formData.get('amount') as string);
 
@@ -722,6 +749,7 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                 .from('goals')
                 .update({ name, targetAmount })
                 .eq('id', editingGoal.id)
+                .eq('family_id', familyId)
                 .select();
 
             if (error) {
@@ -733,7 +761,7 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
         } else {
             const { data, error } = await supabase
                 .from('goals')
-                .insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }])
+                .insert([{ name, targetAmount, currentAmount: 0, family_id: familyId }])
                 .select();
 
             if (error) {
@@ -742,48 +770,17 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                 setGoals(prev => [...prev, data[0]]);
             }
         }
-        form.reset(); // Usa a referência salva
+        e.currentTarget.reset();
     };
 
     const handleDeleteGoal = async (goalId: string) => {
         if (window.confirm("Tem certeza que deseja excluir esta meta?")) {
-            const { error } = await supabase.from('goals').delete().eq('id', goalId);
+            const { error } = await supabase.from('goals').delete().eq('id', goalId).eq('family_id', familyId);
             if (error) {
                 console.error("Error deleting goal:", error);
             } else {
                 setGoals(goals.filter(g => g.id !== goalId));
             }
-        }
-    };
-
-    const handleContributeToGoal = async (goalId: string, currentAmount: number) => {
-        const contributionString = window.prompt("Qual valor você deseja adicionar a esta meta?", "0");
-
-        if (contributionString === null) {
-            return;
-        }
-
-        const contributionAmount = parseFloat(contributionString);
-
-        if (isNaN(contributionAmount) || contributionAmount <= 0) {
-            alert("Por favor, insira um valor numérico válido e positivo.");
-            return;
-        }
-
-        const newCurrentAmount = currentAmount + contributionAmount;
-
-        const { data, error } = await supabase
-            .from('goals')
-            .update({ currentAmount: newCurrentAmount })
-            .eq('id', goalId)
-            .select();
-        
-        if (error) {
-            console.error("Error contributing to goal:", error);
-            alert("Erro ao salvar a contribuição.");
-        } else if (data) {
-            setGoals(prevGoals => prevGoals.map(g => g.id === goalId ? data[0] : g));
-            alert("Contribuição adicionada com sucesso!");
         }
     };
 
@@ -836,11 +833,6 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                             {`${formatCurrency(goal.currentAmount)} / ${formatCurrency(goal.targetAmount)}`}
                         </p>
                         <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end'}}>
-                            <button 
-                                onClick={() => handleContributeToGoal(goal.id, goal.currentAmount)} 
-                                style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--success-color)'}}>
-                                Contribuir
-                            </button>
                             <button onClick={() => setEditingGoal(goal)} style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--secondary-color)'}}>Editar</button>
                             <button onClick={() => handleDeleteGoal(goal.id)} style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--danger-color)'}}>Excluir</button>
                         </div>
@@ -861,7 +853,7 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
     );
 };
 
-const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budget[], setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>, transactions: Transaction[], session: Session }) => {
+const Budgets = ({ budgets, setBudgets, transactions, familyId }: { budgets: Budget[], setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>, transactions: Transaction[], familyId: string | null }) => {
     const monthlySpending = useMemo(() => {
         return transactions
             .filter(t => t.flow === 'expense')
@@ -873,19 +865,20 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
 
     const addBudget = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
-        const formData = new FormData(form);
+        if (!familyId) return;
+
+        const formData = new FormData(e.currentTarget);
         const category = formData.get('category') as string;
         const amount = parseFloat(formData.get('amount') as string);
 
         const existingBudget = budgets.find(b => b.category === category);
 
         if (existingBudget) {
-            // Update
             const { data, error } = await supabase
                 .from('budgets')
                 .update({ amount })
                 .eq('id', existingBudget.id)
+                .eq('family_id', familyId)
                 .select();
 
             if (error) {
@@ -894,10 +887,9 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
                 setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
             }
         } else {
-            // Insert
             const { data, error } = await supabase
                 .from('budgets')
-                .insert([{ category, amount, user_id: session.user.id }])
+                .insert([{ category, amount, family_id: familyId }])
                 .select();
 
             if (error) {
@@ -906,12 +898,12 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
                 setBudgets([...budgets, data[0]]);
             }
         }
-        form.reset(); // Usa a referência salva
+        e.currentTarget.reset();
     };
 
     const handleDeleteBudget = async (budgetId: string) => {
         if (window.confirm("Tem certeza que deseja remover este teto de gastos?")) {
-            const { error } = await supabase.from('budgets').delete().eq('id', budgetId);
+            const { error } = await supabase.from('budgets').delete().eq('id', budgetId).eq('family_id', familyId);
             if (error) {
                 console.error("Error deleting budget:", error);
             } else {
@@ -969,15 +961,12 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
     );
 };
 
-const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudgets, currentUser, session }: {
+const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
     transactions: Transaction[],
     setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>,
     goals: Goal[],
-    setGoals: React.Dispatch<React.SetStateAction<Goal[]>>,
     budgets: Budget[],
-    setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>,
-    currentUser: User,
-    session: Session
+    familyId: string | null
 }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([
         { id: '1', sender: 'ai', text: `Olá! Sou a Fin, sua assistente financeira. Como posso ajudar com suas análises e dúvidas hoje?` }
@@ -991,7 +980,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !ai) return;
+        if (!input.trim() || !ai || !familyId) return;
 
         const userMessage: ChatMessage = { id: Date.now().toString(), sender: 'user', text: input };
         const loadingMessage: ChatMessage = { id: (Date.now() + 1).toString(), sender: 'ai', text: '', isLoading: true };
@@ -1005,40 +994,24 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 properties: {
                     action: {
                         type: Type.STRING,
-                        enum: [
-                            "updateTransaction", "deleteTransaction", "answerQuery"
-                        ],
-                        description: "A ação a ser tomada com base na análise da mensagem."
+                        enum: [ "updateTransaction", "deleteTransaction", "answerQuery" ],
                     },
-                    transactionUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, description: { type: Type.STRING }, } } } },
+                    transactionUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING }, description: { type: Type.STRING }, } } } },
                     transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-                    answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
+                    answer: { type: Type.STRING }
                 }
             };
-            const conversationHistory = messages.slice(-4).map(msg => `${msg.sender === 'user' ? 'Usuário' : 'Você'}: ${msg.text}`).join('\n');
 
             const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Seu papel é ser CONSULTIVA.
-
-### SEU KIT DE FERRAMENTAS (AÇÕES):
-- **Analisar e Responder:** 'answerQuery'. Você deve usar essa ação para responder a perguntas, dar conselhos e analisar os dados financeiros fornecidos.
-- **Gerenciar Transações (Apenas Edição/Exclusão):** 'updateTransaction', 'deleteTransaction'.
-
-### REGRAS DE EXECUÇÃO:
-1.  **NUNCA ADICIONE NADA:** Se o usuário pedir para adicionar uma despesa, meta ou orçamento, instrua-o a usar a aba correspondente ("Lançar", "Metas", "Orçamento"). Você NÃO executa ações de criação.
-    - Exemplo de resposta: "Para adicionar uma nova meta, você pode usar o formulário na aba 'Metas'! Lá você consegue definir o nome e o valor do objetivo."
-2.  **FOCO NA CONSULTORIA:** Sua principal função é fornecer insights. Use os dados financeiros para responder perguntas.
-3.  **MANTENHA O CONTEXTO DA CONVERSA (REGRA MAIS IMPORTANTE):** Sempre considere a última pergunta e resposta no histórico da conversa. Se o usuário estiver discutindo um cenário hipotético (ex: "e se nosso salário aumentasse?"), TODAS as suas respostas seguintes devem permanecer DENTRO desse cenário até que o usuário mude de assunto. Não volte para os "dados financeiros atuais" a menos que seja explicitamente solicitado.
-
-### DADOS FINANCEIROS ATUAIS PARA ANÁLISE (Use apenas se a conversa não for hipotética):
-- Histórico de Transações: ${JSON.stringify(transactions.slice(0, 10))}
-- Metas Atuais: ${JSON.stringify(goals)}
-- Orçamentos Atuais: ${JSON.stringify(budgets)}
-
-### HISTÓRICO DA CONVERSA RECENTE:
-${conversationHistory}
-
-### MENSAGEM ATUAL DO USUÁRIO PARA ANÁLISE:
-"${input}"`;
+            ### REGRAS DE EXECUÇÃO:
+            1.  NUNCA ADICIONE NADA: Se o usuário pedir para adicionar algo, instrua-o a usar a aba correspondente.
+            2.  FOCO NA CONSULTORIA: Sua principal função é fornecer insights com base nos dados.
+            ### DADOS FINANCEIROS ATUAIS PARA ANÁLISE:
+            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 10))}
+            - Metas Atuais: ${JSON.stringify(goals)}
+            - Orçamentos Atuais: ${JSON.stringify(budgets)}
+            ### MENSAGEM ATUAL DO USUÁRIO PARA ANÁLISE:
+            "${input}"`;
 
             const result = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
@@ -1055,7 +1028,7 @@ ${conversationHistory}
                         const { identifier, updates } = responseJson.transactionUpdate;
                         const transactionToUpdate = transactions.find(t => t.description.toLowerCase().includes(identifier.description.toLowerCase()));
                         if (transactionToUpdate) {
-                            const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).select();
+                            const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).eq('family_id', familyId).select();
                             if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); }
                             else if (data) {
                                 setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
@@ -1070,7 +1043,7 @@ ${conversationHistory}
                         const { description } = responseJson.transactionIdentifier;
                         const transactionToDelete = transactions.find(t => t.description.toLowerCase().includes(description.toLowerCase()));
                         if (transactionToDelete) {
-                            const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
+                            const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id).eq('family_id', familyId);
                             if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); }
                             else {
                                 setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
@@ -1134,6 +1107,8 @@ ${conversationHistory}
 
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [familyId, setFamilyId] = useState<string | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [activeScreen, setActiveScreen] = useState('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -1141,17 +1116,11 @@ const App = () => {
   const [theme, setTheme] = useState<Theme>('light');
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // O currentUser é para a lógica interna de quem gasta o quê (Natan/Jussara)
-  // Pode ser expandido para ser configurável no futuro
-  const [currentUser, setCurrentUser] = useState<User>('Natan');
-
   useEffect(() => {
-    // Busca a sessão de autenticação
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
 
-    // Ouve mudanças no estado de autenticação (login, logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
@@ -1160,31 +1129,52 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    // Função para buscar todos os dados do usuário logado
     const fetchData = async () => {
-        if (session) {
+        if (session?.user) {
+            // Etapa 1: Buscar o perfil do usuário para obter o family_id
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('family_id')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profileError || !profileData) {
+                console.error('Error fetching profile or profile not found:', profileError);
+                // Lidar com o caso de um usuário que ainda não tem um perfil (ex: redirecionar para uma página de configuração)
+                return;
+            }
+
+            const currentFamilyId = profileData.family_id;
+            setFamilyId(currentFamilyId);
+
+            // Etapa 2: Buscar todos os membros da família
+            const { data: membersData, error: membersError } = await supabase
+                .from('profiles')
+                .select('id, display_name')
+                .eq('family_id', currentFamilyId);
+            
+            if (membersError) console.error('Error fetching family members:', membersError);
+            else setFamilyMembers(membersData || []);
+
+            // Etapa 3: Buscar todos os dados financeiros da família
             const { data: transactionsData, error: transactionsError } = await supabase
-                .from('transactions')
-                .select('*')
-                .order('date', { ascending: false });
+                .from('transactions').select('*').eq('family_id', currentFamilyId).order('date', { ascending: false });
             if (transactionsError) console.error('Error fetching transactions:', transactionsError);
             else setTransactions(transactionsData || []);
 
             const { data: goalsData, error: goalsError } = await supabase
-                .from('goals')
-                .select('*');
+                .from('goals').select('*').eq('family_id', currentFamilyId);
             if (goalsError) console.error('Error fetching goals:', goalsError);
             else setGoals(goalsData || []);
 
             const { data: budgetsData, error: budgetsError } = await supabase
-                .from('budgets')
-                .select('*');
+                .from('budgets').select('*').eq('family_id', currentFamilyId);
             if (budgetsError) console.error('Error fetching budgets:', budgetsError);
             else setBudgets(budgetsData || []);
         }
     };
     fetchData();
-  }, [session]); // Executa sempre que a sessão mudar
+  }, [session]);
 
   const allSortedTransactions = useMemo(() => [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [transactions]);
 
@@ -1208,106 +1198,17 @@ const App = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Dentro do componente App = () => { ... }
-
-  // ... (outros useEffects que já existem)
-
-  // NOVO useEffect para replicar transações fixas para meses futuros
-  useEffect(() => {
-    const replicateFixedTransactions = async () => {
-      // 1. CONDIÇÕES DE SEGURANÇA: Não executa se...
-      // ...não houver uma sessão de usuário ativa.
-      if (!session) return;
-      
-      const now = new Date();
-      // ...a data selecionada for o mês atual ou um mês passado.
-      if (currentDate.getFullYear() < now.getFullYear() ||
-         (currentDate.getFullYear() === now.getFullYear() && currentDate.getMonth() <= now.getMonth())) {
-        return;
-      }
-
-      // 2. VERIFICA DUPLICATAS: Checa se já existem transações fixas para o mês selecionado.
-      // Se sim, a replicação já foi feita, então paramos aqui.
-      const fixedTransactionsExistForMonth = allSortedTransactions.some(t => {
-          const transactionDate = new Date(t.date);
-          return t.type === 'fixo' &&
-                 transactionDate.getFullYear() === currentDate.getFullYear() &&
-                 transactionDate.getMonth() === currentDate.getMonth();
-      });
-
-      if (fixedTransactionsExistForMonth) {
-        return;
-      }
-
-      // 3. BUSCA AS TRANSAÇÕES DO MÊS ANTERIOR
-      const previousMonthDate = new Date(currentDate);
-      previousMonthDate.setMonth(previousMonthDate.getMonth() - 1);
-      const prevYear = previousMonthDate.getFullYear();
-      const prevMonth = previousMonthDate.getMonth();
-
-      const sourceTransactions = allSortedTransactions.filter(t => {
-        const transactionDate = new Date(t.date);
-        return t.type === 'fixo' &&
-               transactionDate.getFullYear() === prevYear &&
-               transactionDate.getMonth() === prevMonth;
-      });
-      
-      // 4. Se não encontrou transações fixas para copiar, não faz nada.
-      if (sourceTransactions.length === 0) {
-        return;
-      }
-
-      // 5. PREPARA AS NOVAS TRANSAÇÕES: Mapeia as transações encontradas,
-      // atualizando a data para o mês atual, mas mantendo o dia.
-      const newTransactionsToInsert = sourceTransactions.map(t => {
-        const oldDate = new Date(t.date);
-        // Cria a nova data no ano/mês selecionado, mantendo o dia da transação original
-        const newDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          oldDate.getUTCDate() // Usamos getUTCDate para evitar problemas de fuso horário
-        );
-        
-        // Remove o ID antigo para que o banco de dados gere um novo
-        const { id, ...transactionData } = t;
-
-        return {
-          ...transactionData,
-          date: newDate.toISOString().split('T')[0], // Formata para 'YYYY-MM-DD'
-          user_id: session.user.id,
-        };
-      });
-
-      // 6. SALVA NO BANCO DE DADOS E ATUALIZA O ESTADO
-      if (newTransactionsToInsert.length > 0) {
-        const { data, error } = await supabase
-          .from('transactions')
-          .insert(newTransactionsToInsert)
-          .select();
-
-        if (error) {
-          console.error('Error replicating fixed transactions:', error);
-        } else if (data) {
-          // Adiciona as novas transações ao estado local para atualizar a UI
-          setTransactions(prev => [...prev, ...data]);
-          alert(`${data.length} transações fixas (receitas e despesas) foram replicadas do mês anterior!`);
-        }
-      }
-    };
-
-    replicateFixedTransactions();
-  }, [currentDate, session, allSortedTransactions, setTransactions]); // Dependências do useEffect
-  
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    // Limpa o estado local
     setTransactions([]);
     setGoals([]);
     setBudgets([]);
+    setFamilyId(null);
+    setFamilyMembers([]);
   };
 
   if (!session) {
@@ -1317,30 +1218,21 @@ const App = () => {
   const renderScreen = () => {
     switch (activeScreen) {
       case 'dashboard':
-        return <Dashboard transactions={filteredTransactions} goals={goals} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
+        return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'transactions':
-        return <Transactions setTransactions={setTransactions} currentUser={currentUser} allSortedTransactions={allSortedTransactions} session={session} />;
+        return <Transactions setTransactions={setTransactions} allSortedTransactions={allSortedTransactions} session={session} familyId={familyId} familyMembers={familyMembers} />;
       case 'multiple':
-        return <MultipleTransactions setTransactions={setTransactions} session={session} currentUser={currentUser} />;
+        return <MultipleTransactions setTransactions={setTransactions} familyId={familyId} familyMembers={familyMembers} />;
       case 'reports':
         return <Reports transactions={filteredTransactions} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'goals':
-        return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} session={session} />;
+        return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} familyId={familyId} />;
       case 'budgets':
-        return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} session={session}/>;
+        return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} familyId={familyId}/>;
       case 'chat':
-        return <Chat
-            transactions={allSortedTransactions}
-            setTransactions={setTransactions}
-            goals={goals}
-            setGoals={setGoals}
-            budgets={budgets}
-            setBudgets={setBudgets}
-            currentUser={currentUser}
-            session={session}
-        />;
+        return <Chat transactions={allSortedTransactions} setTransactions={setTransactions} goals={goals} budgets={budgets} familyId={familyId} />;
       default:
-        return <Dashboard transactions={filteredTransactions} goals={goals} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
+        return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
     }
   };
 
@@ -1379,14 +1271,13 @@ const App = () => {
 
 
 // --- STYLES ---
-// Os estilos permanecem os mesmos do arquivo original
 const styles: { [key: string]: React.CSSProperties } = {
     // Layout
     mainContent: {
         flex: 1,
         overflowY: 'auto',
         padding: '1rem',
-        paddingBottom: '70px', // Space for nav bar
+        paddingBottom: '70px',
     },
     page: {
         animation: 'fadeIn 0.5s ease-in-out',
@@ -1436,7 +1327,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         borderRadius: '24px',
         boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
         width: '100%',
-        maxWidth: '400px', // Aumentado para acomodar o form de auth
+        maxWidth: '400px',
     },
     loginTitle: {
         margin: 0,
@@ -1449,28 +1340,6 @@ const styles: { [key: string]: React.CSSProperties } = {
         fontSize: '2rem',
         color: 'var(--primary-color)',
         fontWeight: 700,
-    },
-    loginPrompt: {
-        marginBottom: '1.5rem',
-        fontSize: '1rem',
-        color: 'var(--text-color)',
-    },
-    loginButtonContainer: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-    },
-    loginButton: {
-        padding: '1rem',
-        fontSize: '1.2rem',
-        fontWeight: 600,
-        cursor: 'pointer',
-        border: 'none',
-        borderRadius: '16px',
-        backgroundColor: 'var(--primary-color)',
-        color: 'white',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-        boxShadow: '0 4px 15px rgba(0, 122, 255, 0.2)',
     },
     // Header
     header: {
@@ -1790,15 +1659,15 @@ const styles: { [key: string]: React.CSSProperties } = {
         padding: '0.5rem 1rem',
         alignItems: 'center',
         gap: '0.5rem',
-        backgroundColor: 'transparent', // Fundo transparente
-        borderTop: 'none',             // Sem borda superior
+        backgroundColor: 'transparent',
+        borderTop: 'none',
     },
     chatInput: {
         flex: 1,
-        border: '1px solid var(--border-color)', // Adicionada uma borda sutil
-        padding: '0.75rem 1rem',                 // Ajuste no padding
+        border: '1px solid var(--border-color)',
+        padding: '0.75rem 1rem',
         borderRadius: '20px',
-        backgroundColor: 'var(--card-background)', // Fundo mais claro (branco no tema light)
+        backgroundColor: 'var(--card-background)',
         color: 'var(--text-color)',
     },
     chatSendButton: {
@@ -1825,7 +1694,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         gap: '4px',
         alignItems: 'center',
         justifyContent: 'center',
-        height: '21px', // Match text line-height
+        height: '21px',
     },
     dot1: { animation: 'typing-dot 1.5s infinite 0s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
     dot2: { animation: 'typing-dot 1.5s infinite 0.25s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
