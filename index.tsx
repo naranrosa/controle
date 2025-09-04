@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient, Session } from '@supabase/supabase-js';
 import { Auth } from '@supabase/auth-ui-react';
+import './index.css';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 
 
