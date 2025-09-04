@@ -729,29 +729,38 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 }
             };
 
-                    const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
-            Histórico de transações recente: ${JSON.stringify(transactions.slice(0, 5))}.
+                                const prompt = `Você é um assistente financeiro especialista em extrair dados de texto. Sua tarefa é converter a mensagem do usuário em uma estrutura JSON baseada nas ações disponíveis.
 
-            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta.
-            - Se o usuário declarar propriedades comuns no início da frase (ex: "despesas fixas para ambos"), aplique essas propriedades a TODAS as transações que você extrair daquela mensagem.
-            - Se o usuário lista MÚLTIPLAS transações, use 'addMultipleTransactions'.
-            - Se o usuário menciona APENAS UMA transação, use 'addTransaction'.
-            - Para CORRIGIR ou EDITAR, use 'updateTransaction'.
-            - Para REMOVER ou APAGAR, use 'deleteTransaction'.
-            - Para perguntas, use 'answerQuery'.
+            ### REGRAS OBRIGATÓRIAS:
+            1.  **Contexto Geral:** Se o usuário especificar um contexto no início (ex: "despesas fixas para ambos"), você DEVE aplicar essas propriedades (type: 'fixo', person: 'Ambos') a TODAS as transações que encontrar na mensagem.
+            2.  **Análise de Lista:** O usuário pode fornecer uma lista de itens, frequentemente separados por novas linhas ou vírgulas, usando o formato "Descrição: Valor" ou "Descrição Valor". Identifique cada um desses pares como uma transação separada.
+            3.  **Escolha da Ação:**
+                - Use 'addMultipleTransactions' se identificar DUAS OU MAIS transações na mensagem.
+                - Use 'addTransaction' se identificar APENAS UMA transação.
+                - Use 'updateTransaction' para pedidos de CORREÇÃO ou EDIÇÃO.
+                - Use 'deleteTransaction' para pedidos de EXCLUSÃO ou REMOÇÃO.
 
-            Exemplos de ADIÇÃO DE VÁRIAS ('addMultipleTransactions'):
-            - "adicione ifood 50 reais e uber 30 reais" -> { action: 'addMultipleTransactions', transactions: [ { description: 'ifood', amount: 50, type: 'variável' }, { description: 'uber', amount: 30, type: 'variável' } ] }
-            - "lancei 25 de farmácia para a Jussara e 100 de mercado para ambos" -> { action: 'addMultipleTransactions', transactions: [ { description: 'farmácia', amount: 25, person: 'Jussara' }, { description: 'mercado', amount: 100, person: 'Ambos' } ] }
-            - "quero adicionar essas despesas fixas para ambos: Casa: R$ 568,00 Taxa casa: R$ 82,00 Internet: R$ 89,00" -> { action: 'addMultipleTransactions', transactions: [ { description: 'Casa', amount: 568, type: 'fixo', person: 'Ambos' }, { description: 'Taxa casa', amount: 82, type: 'fixo', person: 'Ambos' }, { description: 'Internet', amount: 89, type: 'fixo', person: 'Ambos' } ] }
+            ### EXEMPLOS PRÁTICOS:
 
-            Exemplos de ATUALIZAÇÃO ('updateTransaction'):
-            - "edite o ifood para a categoria alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
+            #### Adicionar Múltiplas Transações:
+            # Exemplo 1 (lista simples):
+            - Usuário: "adicione ifood 50 reais e uber 30 reais"
+            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "ifood", "amount": 50, "type": "variável" }, { "description": "uber", "amount": 30, "type": "variável" } ] }
 
-            Exemplos de EXCLUSÃO ('deleteTransaction'):
-            - "exclua a despesa casa" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'casa' } }
+            # Exemplo 2 (lista complexa com contexto e novas linhas):
+            - Usuário: "quero adicionar essas despesas fixas para ambos:
+              Casa: R$ 568,00
+              Taxa casa: R$ 82,00
+              Internet: R$ 89,00"
+            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "Casa", "amount": 568, "type": "fixo", "person": "Ambos" }, { "description": "Taxa casa", "amount": 82, "type": "fixo", "person": "Ambos" }, { "description": "Internet", "amount": 89, "type": "fixo", "person": "Ambos" } ] }
 
-            Mensagem do usuário: "${input}"`;
+            #### Atualizar Transação:
+            # Exemplo 3:
+            - Usuário: "mude a categoria do ifood para alimentação"
+            - JSON: { "action": "updateTransaction", "transactionUpdate": { "identifier": { "description": "ifood" }, "updates": { "category": "Alimentação" } } }
+
+            ### MENSAGEM DO USUÁRIO PARA ANÁLISE:
+            "${input}"`;
 
             const result = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
