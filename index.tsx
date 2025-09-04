@@ -660,114 +660,73 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-            const responseSchema = {
+                        const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
                         type: Type.STRING,
                         enum: [
-                            "addTransaction", "addMultipleTransactions", 
+                            "addTransaction", "addMultipleTransactions",
                             "updateTransaction", "deleteTransaction",
-                            "addGoal", "updateGoal", "deleteGoal", 
+                            "addGoal", "updateGoal", "deleteGoal",
                             "addBudget", "updateBudget", "deleteBudget",
                             "answerQuery"
                         ],
                         description: "A ação a ser tomada com base na análise da mensagem."
                     },
+                    // --- Seção de Transações ---
                     transaction: {
                         type: Type.OBJECT,
                         properties: {
-                            flow: { type: Type.STRING, enum: ["income", "expense"], description: "Indica se é uma entrada (income) ou saída (expense) de dinheiro." },
-                            description: { type: Type.STRING },
-                            amount: { type: Type.NUMBER },
-                            category: { type: Type.STRING, enum: allCategories },
-                            person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] },
-                            type: { type: Type.STRING, enum: ["fixo", "variável"] },
+                            flow: { type: Type.STRING, enum: ["income", "expense"] }, description: { type: Type.STRING }, amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, type: { type: Type.STRING, enum: ["fixo", "variável"] },
                         },
                     },
-                    
-                    transactions: { // Para adicionar MÚLTIPLAS transações
+                    transactions: {
                         type: Type.ARRAY,
                         items: {
                             type: Type.OBJECT,
                             properties: {
-                                flow: { type: Type.STRING, enum: ["income", "expense"] },
-                                description: { type: Type.STRING },
-                                amount: { type: Type.NUMBER },
-                                category: { type: Type.STRING, enum: allCategories },
-                                person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] },
-                                type: { type: Type.STRING, enum: ["fixo", "variável"] },
+                                flow: { type: Type.STRING, enum: ["income", "expense"] }, description: { type: Type.STRING }, amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, type: { type: Type.STRING, enum: ["fixo", "variável"] },
                             },
                         }
                     },
-                
                     transactionUpdate: {
                         type: Type.OBJECT,
                         properties: {
-                            identifier: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    description: { type: Type.STRING, description: "A descrição da transação a ser atualizada. Ex: 'Taxa casa'" }
-                                }
-                            },
-                            updates: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    amount: { type: Type.NUMBER },
-                                    category: { type: Type.STRING, enum: allCategories },
-                                    person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] },
-                                    description: { type: Type.STRING },
-                                }
-                            }
-                        },
-                        description: "Objeto usado para atualizar uma transação existente."
+                            identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
+                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, description: { type: Type.STRING }, } }
+                        }
                     },
-                    transactionIdentifier: {
-                        type: Type.OBJECT,
-                        properties: {
-                            description: { type: Type.STRING, description: "A descrição da transação a ser excluída. Ex: 'Taxa casa'" }
-                        },
-                        description: "Objeto usado para identificar uma transação a ser excluída."
-                    },
-                    goal: {
-                        type: Type.OBJECT,
-                        properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } }
-                    },
+                    transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
+
+                    // --- Seção de Metas (Goals) ---
+                    goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
                     goalUpdate: {
                         type: Type.OBJECT,
                         properties: {
-                            identifier: { properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } },
-                            updates: { properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } }
+                            identifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } },
+                            updates: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } }
                         }
                     },
-                    goalIdentifier: {
-                        type: Type.OBJECT,
-                        properties: { name: { type: Type.STRING, description: "Nome da meta a ser excluída." } }
-                    },
+                    goalIdentifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser excluída." } } },
 
-                    // Seção de Orçamentos (Budgets)
-                    budget: {
-                        type: Type.OBJECT,
-                        properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } }
-                    },
+                    // --- Seção de Orçamentos (Budgets) ---
+                    budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
                     budgetUpdate: {
                         type: Type.OBJECT,
                         properties: {
-                            identifier: { properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } },
-                            updates: { properties: { amount: { type: Type.NUMBER } } }
+                            identifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } },
+                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER } } }
                         }
                     },
-                    budgetIdentifier: {
-                        type: Type.OBJECT,
-                        properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser excluído." } }
-                    },
+                    budgetIdentifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser excluído." } } },
 
-                    // Seção de Respostas (Consultoria)
+                    // --- Seção de Respostas (Consultoria) ---
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
                 }
             };
 
-            const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a gerenciar suas finanças, oferecendo tanto ferramentas de registro quanto insights valiosos.
+                        const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a gerenciar suas finanças, oferecendo tanto ferramentas de registro quanto insights valiosos.
 
             ### SEU KIT DE FERRAMENTAS (AÇÕES):
             - **Transações:** 'addMultipleTransactions', 'updateTransaction', 'deleteTransaction'.
@@ -824,88 +783,59 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     if (responseJson.transaction?.amount && responseJson.transaction?.description) {
                         const t = responseJson.transaction;
                         const newTransactionData: Omit<Transaction, 'id'> = {
-                            description: t.description,
-                            amount: t.amount,
-                            flow: t.flow || 'expense',
-                            category: t.category || 'Outros',
-                            person: t.person || currentUser,
-                            type: t.type || 'variável',
-                            date: new Date().toISOString().split('T')[0],
-                            user_id: session.user.id
+                            description: t.description, amount: t.amount, flow: t.flow || 'expense', category: t.category || 'Outros', person: t.person || currentUser, type: t.type || 'variável', date: new Date().toISOString().split('T')[0], user_id: session.user.id
                         };
-                        const {data, error} = await supabase.from('transactions').insert([newTransactionData]).select();
+                        const { data, error } = await supabase.from('transactions').insert([newTransactionData]).select();
                         if (error) { aiResponseText = "Erro ao salvar a transação."; console.error(error); }
                         else if (data) {
-                           setTransactions(prev => [data[0], ...prev]);
-                           aiResponseText = `${t.flow === 'income' ? 'Receita' : 'Despesa'} de ${formatCurrency(t.amount)} adicionada: ${t.description}.`;
+                            setTransactions(prev => [data[0], ...prev]);
+                            aiResponseText = `${t.flow === 'income' ? 'Receita' : 'Despesa'} de ${formatCurrency(t.amount)} adicionada: ${t.description}.`;
                         }
                     }
                     break;
-
-                // NOVO CASE PARA MÚLTIPLAS TRANSAÇÕES
                 case 'addMultipleTransactions':
                     if (responseJson.transactions && Array.isArray(responseJson.transactions) && responseJson.transactions.length > 0) {
                         const newTransactionsData = responseJson.transactions.map((t: any) => ({
-                            description: t.description,
-                            amount: t.amount,
-                            flow: t.flow || 'expense',
-                            category: t.category || 'Outros',
-                            person: t.person || currentUser,
-                            type: t.type || 'variável',
-                            date: new Date().toISOString().split('T')[0],
-                            user_id: session.user.id
+                            description: t.description, amount: t.amount, flow: t.flow || 'expense', category: t.category || 'Outros', person: t.person || currentUser, type: t.type || 'variável', date: new Date().toISOString().split('T')[0], user_id: session.user.id
                         }));
-
                         const { data, error } = await supabase.from('transactions').insert(newTransactionsData).select();
-
-                        if (error) {
-                            aiResponseText = "Ocorreu um erro ao salvar as transações.";
-                            console.error(error);
-                        } else if (data) {
+                        if (error) { aiResponseText = "Ocorreu um erro ao salvar as transações."; console.error(error); }
+                        else if (data) {
                             setTransactions(prev => [...data, ...prev]);
                             const summary = data.map(t => `${t.description} (${formatCurrency(t.amount)})`).join(' e ');
                             aiResponseText = `Ok, adicionei ${data.length} novas transações: ${summary}.`;
                         }
                     }
                     break;
-
                 case 'updateTransaction':
                     if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
                         const { identifier, updates } = responseJson.transactionUpdate;
                         const transactionToUpdate = transactions.find(t => t.description.toLowerCase().includes(identifier.description.toLowerCase()));
-
                         if (transactionToUpdate) {
                             const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).select();
-                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); } 
+                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); }
                             else if (data) {
                                 setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
                                 const changedFields = Object.keys(updates).join(', ');
                                 aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}". O(s) campo(s) '${changedFields}' foi/foram alterado(s).`;
                             }
-                        } else {
-                            aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}' para atualizar.`;
-                        }
+                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}' para atualizar.`; }
                     }
                     break;
-
                 case 'deleteTransaction':
                     if (responseJson.transactionIdentifier?.description) {
                         const { description } = responseJson.transactionIdentifier;
                         const transactionToDelete = transactions.find(t => t.description.toLowerCase().includes(description.toLowerCase()));
-
                         if (transactionToDelete) {
                             const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
-                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); } 
+                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); }
                             else {
                                 setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
                                 aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída com sucesso.`;
                             }
-                        } else {
-                            aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}' para excluir.`;
-                        }
+                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}' para excluir.`; }
                     }
                     break;
-
                 case 'addGoal':
                     if (responseJson.goal?.name && responseJson.goal?.targetAmount) {
                         const { name, targetAmount } = responseJson.goal;
@@ -945,8 +875,6 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                         } else { aiResponseText = `Não encontrei a meta "${name}" para excluir.`; }
                     }
                     break;
-                
-                // --- NOVOS CASES PARA ORÇAMENTOS ---
                 case 'addBudget':
                     if (responseJson.budget?.category && responseJson.budget?.amount) {
                         const { category, amount } = responseJson.budget;
@@ -986,7 +914,6 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                         } else { aiResponseText = `Não encontrei um teto para a categoria "${category}" para excluir.`; }
                     }
                     break;
-
                 case 'answerQuery':
                     if (responseJson.answer) {
                        aiResponseText = responseJson.answer;
