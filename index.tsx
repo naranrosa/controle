@@ -18,7 +18,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // --- TYPES AND INTERFACES ---
 interface Transaction {
   id: string;
-  person: string; // Dinâmico, ex: 'Natan', 'Jussara', 'Ambos'
+  person: string; // Dinâmico, ex: 'Carlos', 'Diana', 'Ambos'
   category: string;
   type: 'fixo' | 'variável';
   flow: 'income' | 'expense';
@@ -129,36 +129,60 @@ const MonthNavigator = ({ currentDate, setCurrentDate }: { currentDate: Date, se
 // --- SCREEN COMPONENTS ---
 
 const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => void }) => {
-    // 1. Estado para controlar a visão (Entrar vs. Cadastrar)
-    const [view, setView] = useState<'signIn' | 'signUp'>('signIn');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    // 2. Estados para controlar os campos do formulário
-    const [name, setName] = useState('');
-const [email, setEmail] = useState('');
-const [password, setPassword] = useState('');
-const [loading, setLoading] = useState(false);
+    const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setLoading(true);
+        const { error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        });
+        if (error) {
+            alert("Erro no login: " + error.message);
+        }
+        // O onAuthStateChange no App cuidará do redirecionamento
+        setLoading(false);
+    };
 
-const handleSignUp = async () => {
-    setLoading(true);
+    return (
+        <div style={styles.loginContainer}>
+             <button onClick={toggleTheme} style={styles.loginThemeToggleButton}>
+                {theme === 'light' ? Icons.moon : Icons.sun}
+            </button>
+            <div style={styles.loginBox}>
+                <h2 style={styles.loginTitle}>Bem-vindo(a) ao</h2>
+                <h1 style={styles.loginAppName}>Financeiro a Dois</h1>
 
-    // ETAPA 1: Apenas cadastre o usuário. O trigger fará o resto.
-    const { data, error } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-        alert("Erro no cadastro: " + error.message);
-        return;
-    }
-
-    if (data.user) {
-        alert('Cadastro realizado! Verifique sua caixa de entrada para confirmar o email.');
-        // Aqui, futuramente, adicionaremos a lógica para atualizar o nome.
-        // Por enquanto, apenas confirmamos que o cadastro funcionou.
-    }
+                <form onSubmit={handleSignIn} style={{...styles.form, gap: '1rem', marginTop: '2rem'}}>
+                    <input
+                        style={styles.input}
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                    />
+                    <input
+                        style={styles.input}
+                        type="password"
+                        placeholder="Sua senha"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+                    <button type="submit" style={styles.button} disabled={loading}>
+                        {loading ? 'Entrando...' : 'Entrar'}
+                    </button>
+                </form>
+                <p style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--text-light)'}}>
+                    O cadastro de novos usuários é feito por um administrador.
+                </p>
+            </div>
+        </div>
+    );
 };
 
 const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
