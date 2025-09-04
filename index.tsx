@@ -82,7 +82,7 @@ const formatMonthYear = (date: Date) => {
 
 
 // --- CONSTANTS ---
-const expenseCategories = ['Alimentação', 'Moradia', 'Lazer', 'Saúde', 'Transporte', 'Outros'];
+const expenseCategories = ['Alimentação', 'Moradia', 'Lazer', 'Saúde', 'Transporte', 'Cartão', 'igreja', 'Outros'];
 const incomeCategories = ['Salário', 'Freelancer', 'Serviços', 'Outros'];
 const allCategories = [...new Set([...expenseCategories, ...incomeCategories])];
 
