@@ -1,0 +1,70 @@
+
+.app-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.main-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Important for scroll management */
+}
+
+/* --- Desktop & Tablet Layout --- */
+@media (min-width: 769px) {
+    #root {
+        max-width: none;
+        box-shadow: none;
+        background-color: var(--background-color);
+    }
+
+    .app-layout {
+        flex-direction: row;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .app-layout > .app-nav {
+        /* Override inline styles from the JS object */
+        position: static !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        width: 240px;
+        height: 100%;
+        padding: 2rem 0 !important;
+        border-top: none !important;
+        border-right: 1px solid var(--border-color);
+        flex-shrink: 0;
+        max-width: none !important;
+        margin: 0 !important;
+        left: unset !important;
+        right: unset !important;
+        bottom: unset !important;
+        background-color: var(--card-background) !important;
+        z-index: 100;
+    }
+    
+    .app-nav .nav-item-btn {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        text-align: left !important;
+        padding: 0.75rem 1.5rem !important;
+        margin: 0.25rem 1rem;
+        flex: none !important; /* Override mobile flex-grow */
+    }
+
+    .app-nav .nav-item-btn .nav-label {
+        margin-top: 0 !important;
+        margin-left: 0.75rem;
+        font-size: 1rem !important;
+    }
+    
+    .main-content-wrapper .app-main {
+        padding: 1.5rem 2rem !important;
+    }
+}
