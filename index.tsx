@@ -141,126 +141,24 @@ const [loading, setLoading] = useState(false);
 const handleSignUp = async () => {
     setLoading(true);
 
-    // Etapa 1: Cadastrar o usuário (sem passar metadados, pois não precisamos mais)
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    // ETAPA 1: Apenas cadastre o usuário. O trigger fará o resto.
+    const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
     });
 
-    if (signUpError) {
-        alert("Erro no cadastro: " + signUpError.message);
-        setLoading(false);
-        return; // Interrompe a função se o cadastro falhar
-    }
-
-    // Se o cadastro foi bem-sucedido, o trigger criou o perfil com "Novo Usuário".
-    // Agora, vamos atualizá-lo com o nome correto.
-    if (signUpData.user) {
-        // Etapa 2: Atualizar o perfil recém-criado
-        const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ display_name: name }) // Atualiza a coluna 'display_name'
-            .eq('id', signUpData.user.id); // Onde o 'id' corresponde ao do usuário recém-criado
-
-        if (updateError) {
-            // Informa sobre o erro de atualização, mas o cadastro em si funcionou
-            alert("Cadastro realizado, mas houve um erro ao salvar seu nome: " + updateError.message);
-        } else {
-            alert('Cadastro realizado com sucesso! Verifique sua caixa de entrada para confirmar seu email.');
-        }
-    }
-    
     setLoading(false);
-};
 
-    // 4. Função de Login (SignIn) customizada
-    const handleSignIn = async () => {
-        setLoading(true);
-        const { error } = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password,
-        });
-        if (error) {
-            alert("Erro no login: " + error.message);
-        }
-        // Se o login for bem-sucedido, o onAuthStateChange no componente App cuidará do resto.
-        setLoading(false);
-    };
+    if (error) {
+        alert("Erro no cadastro: " + error.message);
+        return;
+    }
 
-    // 5. Função que decide qual ação tomar ao submeter o formulário
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (view === 'signUp') {
-            handleSignUp();
-        } else {
-            handleSignIn();
-        }
-    };
-
-    return (
-        <div style={styles.loginContainer}>
-             <button onClick={toggleTheme} style={styles.loginThemeToggleButton}>
-                {theme === 'light' ? Icons.moon : Icons.sun}
-            </button>
-            <div style={styles.loginBox}>
-                <h2 style={styles.loginTitle}>Bem-vindo(a) ao</h2>
-                <h1 style={styles.loginAppName}>Financeiro a Dois</h1>
-
-                {/* Este é o novo formulário customizado */}
-                <form onSubmit={handleSubmit} style={{...styles.form, gap: '1rem', marginTop: '2rem'}}>
-                    {/* O campo "Nome" só aparece na tela de cadastro */}
-                    {view === 'signUp' && (
-                        <input
-                            style={styles.input}
-                            type="text"
-                            placeholder="Seu nome"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            required
-                        />
-                    )}
-
-                    <input
-                        style={styles.input}
-                        type="email"
-                        placeholder="seu@email.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
-                    <input
-                        style={styles.input}
-                        type="password"
-                        placeholder="Sua senha"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
-
-                    <button type="submit" style={styles.button} disabled={loading}>
-                        {loading ? 'Carregando...' : (view === 'signIn' ? 'Entrar' : 'Cadastrar')}
-                    </button>
-                </form>
-
-                {/* Links para alternar entre Login e Cadastro */}
-                {view === 'signIn' ? (
-                    <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
-                        Não tem uma conta?{' '}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setView('signUp'); }} style={{ color: 'var(--primary-color)' }}>
-                            Cadastre-se
-                        </a>
-                    </p>
-                ) : (
-                    <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
-                        Já tem uma conta?{' '}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setView('signIn'); }} style={{ color: 'var(--primary-color)' }}>
-                            Faça o login
-                        </a>
-                    </p>
-                )}
-            </div>
-        </div>
-    );
+    if (data.user) {
+        alert('Cadastro realizado! Verifique sua caixa de entrada para confirmar o email.');
+        // Aqui, futuramente, adicionaremos a lógica para atualizar o nome.
+        // Por enquanto, apenas confirmamos que o cadastro funcionou.
+    }
 };
 
 const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
