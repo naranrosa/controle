@@ -220,16 +220,17 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
     const { natanExpenses, jussaraExpenses } = useMemo(() => {
         let natanTotal = 0;
         let jussaraTotal = 0;
-        transactions.filter(t => t.flow === 'expense').forEach(t => {
-            if (t.person === 'Natan') {
-                natanTotal += t.amount;
-            } else if (t.person === 'Jussara') {
-                jussaraTotal += t.amount;
-            } else if (t.person === 'Ambos') {
-                natanTotal += t.amount / 2;
-                jussaraTotal += t.amount / 2;
-            }
-        });
+        transactions
+            .filter(t => t.flow === 'expense')
+            .forEach(t => {
+                if (t.person === 'Natan') {
+                    natanTotal += t.amount;
+                } else if (t.person === 'Jussara') {
+                    jussaraTotal += t.amount;
+                }
+                // A condição para 'Ambos' foi removida.
+                // Agora, apenas despesas explicitamente de Natan ou Jussara serão somadas aqui.
+            });
         return { natanExpenses: natanTotal, jussaraExpenses: jussaraTotal };
     }, [transactions]);
 
