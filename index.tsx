@@ -685,8 +685,8 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
             } else if (data) {
                 setBudgets([...budgets, data[0]]);
                 e.currentTarget.reset();
+            }
         }
-
     };
 
     return (
