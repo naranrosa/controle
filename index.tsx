@@ -431,50 +431,59 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
     const [flow, setFlow] = useState<'expense' | 'income'>('expense');
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-    // Efeito para mudar o 'flow' (receita/despesa) quando uma transação é selecionada para edição
     useEffect(() => {
         if (editingTransaction) {
             setFlow(editingTransaction.flow);
         }
     }, [editingTransaction]);
 
-    // Dentro do componente Transactions
-const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget; // SOLUÇÃO: Salva a referência do formulário aqui!
-    const formData = new FormData(form);
-    const name = formData.get('name') as string;
-    const targetAmount = parseFloat(formData.get('amount') as string);
+    const handleAddOrUpdateTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
+        const formData = new FormData(form);
 
-    if (editingGoal) {
-        // Lógica de Atualização
-        const { data, error } = await supabase
-            .from('goals')
-            .update({ name, targetAmount })
-            .eq('id', editingGoal.id)
-            .select();
-        
-        if (error) {
-            console.error("Error updating goal:", error);
-        } else if (data) {
-            setGoals(goals.map(g => g.id === editingGoal.id ? data[0] : g));
-            setEditingGoal(null);
-        }
-    } else {
-        // Lógica de Adição
-        const { data, error } = await supabase
-            .from('goals')
-            .insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }])
-            .select();
+        const transactionData = {
+            description: formData.get('description') as string,
+            amount: parseFloat(formData.get('amount') as string),
+            category: formData.get('category') as string,
+            person: formData.get('person') as 'Natan' | 'Jussara' | 'Ambos',
+            type: formData.get('type') as 'fixo' | 'variável',
+            flow: flow,
+            date: editingTransaction ? editingTransaction.date : new Date().toISOString().split('T')[0],
+            user_id: session.user.id,
+        };
 
-        if (error) {
-            console.error("Error adding goal:", error);
-        } else if (data) {
-            setGoals(prev => [...prev, data[0]]);
+        if (editingTransaction) {
+            const { data, error } = await supabase
+                .from('transactions')
+                .update(transactionData)
+                .eq('id', editingTransaction.id)
+                .select();
+
+            if (error) {
+                console.error('Error updating transaction:', error);
+                alert('Erro ao atualizar a transação.');
+            } else if (data) {
+                setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? data[0] : t));
+                alert('Transação atualizada com sucesso!');
+                setEditingTransaction(null);
+                form.reset(); // Usa a referência salva
+            }
+        } else {
+            const { data, error } = await supabase
+                .from('transactions')
+                .insert([transactionData])
+                .select();
+
+            if (error) {
+                console.error('Error adding transaction:', error);
+                alert('Erro ao adicionar transação.');
+            } else if (data) {
+                setTransactions(prev => [data[0], ...prev]);
+                form.reset(); // Usa a referência salva
+            }
         }
-    }
-    form.reset(); // Usa a referência salva
-};
+    };
 
     const handleDeleteTransaction = async (transactionId: string) => {
         if (window.confirm("Tem certeza que deseja excluir este lançamento?")) {
@@ -491,11 +500,10 @@ const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
             }
         }
     };
-
-    // Função para iniciar a edição de uma transação
+    
     const handleSetEditing = (transaction: Transaction) => {
         setEditingTransaction(transaction);
-        window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola a tela para o topo para ver o formulário
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const currentCategories = flow === 'expense' ? expenseCategories : incomeCategories;
@@ -508,49 +516,49 @@ const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
                     <button onClick={() => setFlow('expense')} style={flow === 'expense' ? styles.toggleButtonActive : styles.toggleButton}>Despesa</button>
                     <button onClick={() => setFlow('income')} style={flow === 'income' ? styles.toggleButtonActive : styles.toggleButton}>Receita</button>
                 </div>
-                <form
-                    key={editingTransaction ? editingTransaction.id : 'new-transaction'} // Chave para forçar o formulário a resetar com novos valores padrão
-                    onSubmit={handleAddOrUpdateTransaction}
+                <form 
+                    key={editingTransaction ? editingTransaction.id : 'new-transaction'}
+                    onSubmit={handleAddOrUpdateTransaction} 
                     style={styles.form}
                 >
-                    <input
-                        style={styles.input}
-                        name="description"
-                        placeholder="Descrição"
-                        required
+                    <input 
+                        style={styles.input} 
+                        name="description" 
+                        placeholder="Descrição" 
+                        required 
                         defaultValue={editingTransaction?.description || ''}
                     />
-                    <input
-                        style={styles.input}
-                        name="amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="Valor (R$)"
-                        required
+                    <input 
+                        style={styles.input} 
+                        name="amount" 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="Valor (R$)" 
+                        required 
                         defaultValue={editingTransaction?.amount || ''}
                     />
-                    <select
-                        style={styles.input}
-                        name="category"
-                        required
+                    <select 
+                        style={styles.input} 
+                        name="category" 
+                        required 
                         defaultValue={editingTransaction?.category || currentCategories[0]}
                     >
                         {currentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={styles.grid}>
-                        <select
-                            style={styles.input}
-                            name="person"
-                            required
+                        <select 
+                            style={styles.input} 
+                            name="person" 
+                            required 
                             defaultValue={editingTransaction?.person || currentUser}
                         >
                             <option value="Natan">Natan</option>
                             <option value="Jussara">Jussara</option>
                             <option value="Ambos">Ambos</option>
                         </select>
-                        <select
-                            style={styles.input}
-                            name="type"
+                        <select 
+                            style={styles.input} 
+                            name="type" 
                             required
                             defaultValue={editingTransaction?.type || 'variável'}
                         >
@@ -562,9 +570,9 @@ const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
                         {editingTransaction ? 'Salvar Alterações' : 'Adicionar'}
                     </button>
                     {editingTransaction && (
-                        <button
-                            type="button"
-                            onClick={() => setEditingTransaction(null)}
+                        <button 
+                            type="button" 
+                            onClick={() => setEditingTransaction(null)} 
                             style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}
                         >
                             Cancelar Edição
@@ -704,12 +712,12 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
 
     const handleAddOrUpdateGoal = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
+        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
+        const formData = new FormData(form);
         const name = formData.get('name') as string;
         const targetAmount = parseFloat(formData.get('amount') as string);
 
         if (editingGoal) {
-            // Lógica de Atualização
             const { data, error } = await supabase
                 .from('goals')
                 .update({ name, targetAmount })
@@ -723,7 +731,6 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                 setEditingGoal(null);
             }
         } else {
-            // Lógica de Adição
             const { data, error } = await supabase
                 .from('goals')
                 .insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }])
@@ -735,7 +742,7 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                 setGoals(prev => [...prev, data[0]]);
             }
         }
-        e.currentTarget.reset();
+        form.reset(); // Usa a referência salva
     };
 
     const handleDeleteGoal = async (goalId: string) => {
@@ -746,6 +753,37 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
             } else {
                 setGoals(goals.filter(g => g.id !== goalId));
             }
+        }
+    };
+
+    const handleContributeToGoal = async (goalId: string, currentAmount: number) => {
+        const contributionString = window.prompt("Qual valor você deseja adicionar a esta meta?", "0");
+
+        if (contributionString === null) {
+            return;
+        }
+
+        const contributionAmount = parseFloat(contributionString);
+
+        if (isNaN(contributionAmount) || contributionAmount <= 0) {
+            alert("Por favor, insira um valor numérico válido e positivo.");
+            return;
+        }
+
+        const newCurrentAmount = currentAmount + contributionAmount;
+
+        const { data, error } = await supabase
+            .from('goals')
+            .update({ currentAmount: newCurrentAmount })
+            .eq('id', goalId)
+            .select();
+        
+        if (error) {
+            console.error("Error contributing to goal:", error);
+            alert("Erro ao salvar a contribuição.");
+        } else if (data) {
+            setGoals(prevGoals => prevGoals.map(g => g.id === goalId ? data[0] : g));
+            alert("Contribuição adicionada com sucesso!");
         }
     };
 
@@ -798,6 +836,11 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                             {`${formatCurrency(goal.currentAmount)} / ${formatCurrency(goal.targetAmount)}`}
                         </p>
                         <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end'}}>
+                            <button 
+                                onClick={() => handleContributeToGoal(goal.id, goal.currentAmount)} 
+                                style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--success-color)'}}>
+                                Contribuir
+                            </button>
                             <button onClick={() => setEditingGoal(goal)} style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--secondary-color)'}}>Editar</button>
                             <button onClick={() => handleDeleteGoal(goal.id)} style={{...styles.button, fontSize: '0.8rem', padding: '0.5rem 1rem', background: 'var(--danger-color)'}}>Excluir</button>
                         </div>
@@ -829,42 +872,42 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
     }, [transactions]);
 
     const addBudget = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget; // SOLUÇÃO: Salva a referência do formulário aqui!
-    const formData = new FormData(form);
-    const category = formData.get('category') as string;
-    const amount = parseFloat(formData.get('amount') as string);
+        e.preventDefault();
+        const form = e.currentTarget; // CORREÇÃO: Salva a referência do formulário
+        const formData = new FormData(form);
+        const category = formData.get('category') as string;
+        const amount = parseFloat(formData.get('amount') as string);
 
-    const existingBudget = budgets.find(b => b.category === category);
+        const existingBudget = budgets.find(b => b.category === category);
 
-    if (existingBudget) {
-        // Update
-        const { data, error } = await supabase
-            .from('budgets')
-            .update({ amount })
-            .eq('id', existingBudget.id)
-            .select();
+        if (existingBudget) {
+            // Update
+            const { data, error } = await supabase
+                .from('budgets')
+                .update({ amount })
+                .eq('id', existingBudget.id)
+                .select();
 
-        if (error) {
-            console.error("Error updating budget:", error);
-        } else if (data) {
-            setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
+            if (error) {
+                console.error("Error updating budget:", error);
+            } else if (data) {
+                setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
+            }
+        } else {
+            // Insert
+            const { data, error } = await supabase
+                .from('budgets')
+                .insert([{ category, amount, user_id: session.user.id }])
+                .select();
+
+            if (error) {
+                console.error("Error adding budget:", error);
+            } else if (data) {
+                setBudgets([...budgets, data[0]]);
+            }
         }
-    } else {
-        // Insert
-        const { data, error } = await supabase
-            .from('budgets')
-            .insert([{ category, amount, user_id: session.user.id }])
-            .select();
-
-        if (error) {
-            console.error("Error adding budget:", error);
-        } else if (data) {
-            setBudgets([...budgets, data[0]]);
-        }
-    }
-    form.reset(); // Usa a referência salva
-};
+        form.reset(); // Usa a referência salva
+    };
 
     const handleDeleteBudget = async (budgetId: string) => {
         if (window.confirm("Tem certeza que deseja remover este teto de gastos?")) {
