@@ -132,7 +132,7 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
             </button>
             <div style={styles.loginBox}>
                 <h2 style={styles.loginTitle}>Bem-vindo(a) ao</h2>
-                <h1 style={styles.loginAppName}>O Financeiro a Dois</h1>
+                <h1 style={styles.loginAppName}>Financeiro a Dois</h1>
                 <div style={{marginTop: '2rem'}}>
                     <Auth
                         supabaseClient={supabase}
