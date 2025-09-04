@@ -226,7 +226,7 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
             // 2. Soma apenas se a pessoa for EXATAMENTE 'Natan'
             if (t.person === 'Natan') {
                 natanTotal += t.amount;
-            
+
             // 3. Soma apenas se a pessoa for EXATAMENTE 'Jussara'
             } else if (t.person === 'Jussara') {
                 jussaraTotal += t.amount;
@@ -332,7 +332,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
     const handleParseText = () => {
         const lines = inputText.split('\n').filter(line => line.trim() !== '');
         const regex = /(.*?):\s*R?\$\s*([\d,.]+)/;
-        
+
         const newParsed = lines.map(line => {
             const match = line.match(regex);
             if (match) {
@@ -349,7 +349,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
             }
             return null;
         }).filter(item => item !== null) as Omit<Transaction, 'id' | 'user_id' | 'date'>[];
-        
+
         setParsedTransactions(newParsed);
     };
 
@@ -502,7 +502,7 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
             }
         }
     };
-    
+
     // Função para iniciar a edição de uma transação
     const handleSetEditing = (transaction: Transaction) => {
         setEditingTransaction(transaction);
@@ -519,49 +519,49 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                     <button onClick={() => setFlow('expense')} style={flow === 'expense' ? styles.toggleButtonActive : styles.toggleButton}>Despesa</button>
                     <button onClick={() => setFlow('income')} style={flow === 'income' ? styles.toggleButtonActive : styles.toggleButton}>Receita</button>
                 </div>
-                <form 
+                <form
                     key={editingTransaction ? editingTransaction.id : 'new-transaction'} // Chave para forçar o formulário a resetar com novos valores padrão
-                    onSubmit={handleAddOrUpdateTransaction} 
+                    onSubmit={handleAddOrUpdateTransaction}
                     style={styles.form}
                 >
-                    <input 
-                        style={styles.input} 
-                        name="description" 
-                        placeholder="Descrição" 
-                        required 
+                    <input
+                        style={styles.input}
+                        name="description"
+                        placeholder="Descrição"
+                        required
                         defaultValue={editingTransaction?.description || ''}
                     />
-                    <input 
-                        style={styles.input} 
-                        name="amount" 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="Valor (R$)" 
-                        required 
+                    <input
+                        style={styles.input}
+                        name="amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="Valor (R$)"
+                        required
                         defaultValue={editingTransaction?.amount || ''}
                     />
-                    <select 
-                        style={styles.input} 
-                        name="category" 
-                        required 
+                    <select
+                        style={styles.input}
+                        name="category"
+                        required
                         defaultValue={editingTransaction?.category || currentCategories[0]}
                     >
                         {currentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={styles.grid}>
-                        <select 
-                            style={styles.input} 
-                            name="person" 
-                            required 
+                        <select
+                            style={styles.input}
+                            name="person"
+                            required
                             defaultValue={editingTransaction?.person || currentUser}
                         >
                             <option value="Natan">Natan</option>
                             <option value="Jussara">Jussara</option>
                             <option value="Ambos">Ambos</option>
                         </select>
-                        <select 
-                            style={styles.input} 
-                            name="type" 
+                        <select
+                            style={styles.input}
+                            name="type"
                             required
                             defaultValue={editingTransaction?.type || 'variável'}
                         >
@@ -573,9 +573,9 @@ const Transactions = ({ setTransactions, currentUser, allSortedTransactions, ses
                         {editingTransaction ? 'Salvar Alterações' : 'Adicionar'}
                     </button>
                     {editingTransaction && (
-                        <button 
-                            type="button" 
-                            onClick={() => setEditingTransaction(null)} 
+                        <button
+                            type="button"
+                            onClick={() => setEditingTransaction(null)}
                             style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}
                         >
                             Cancelar Edição
@@ -726,7 +726,7 @@ const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setG
                 .update({ name, targetAmount })
                 .eq('id', editingGoal.id)
                 .select();
-            
+
             if (error) {
                 console.error("Error updating goal:", error);
             } else if (data) {
@@ -1172,6 +1172,96 @@ const App = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Dentro do componente App = () => { ... }
+
+  // ... (outros useEffects que já existem)
+
+  // NOVO useEffect para replicar transações fixas para meses futuros
+  useEffect(() => {
+    const replicateFixedTransactions = async () => {
+      // 1. CONDIÇÕES DE SEGURANÇA: Não executa se...
+      // ...não houver uma sessão de usuário ativa.
+      if (!session) return;
+      
+      const now = new Date();
+      // ...a data selecionada for o mês atual ou um mês passado.
+      if (currentDate.getFullYear() < now.getFullYear() ||
+         (currentDate.getFullYear() === now.getFullYear() && currentDate.getMonth() <= now.getMonth())) {
+        return;
+      }
+
+      // 2. VERIFICA DUPLICATAS: Checa se já existem transações fixas para o mês selecionado.
+      // Se sim, a replicação já foi feita, então paramos aqui.
+      const fixedTransactionsExistForMonth = allSortedTransactions.some(t => {
+          const transactionDate = new Date(t.date);
+          return t.type === 'fixo' &&
+                 transactionDate.getFullYear() === currentDate.getFullYear() &&
+                 transactionDate.getMonth() === currentDate.getMonth();
+      });
+
+      if (fixedTransactionsExistForMonth) {
+        return;
+      }
+
+      // 3. BUSCA AS TRANSAÇÕES DO MÊS ANTERIOR
+      const previousMonthDate = new Date(currentDate);
+      previousMonthDate.setMonth(previousMonthDate.getMonth() - 1);
+      const prevYear = previousMonthDate.getFullYear();
+      const prevMonth = previousMonthDate.getMonth();
+
+      const sourceTransactions = allSortedTransactions.filter(t => {
+        const transactionDate = new Date(t.date);
+        return t.type === 'fixo' &&
+               transactionDate.getFullYear() === prevYear &&
+               transactionDate.getMonth() === prevMonth;
+      });
+      
+      // 4. Se não encontrou transações fixas para copiar, não faz nada.
+      if (sourceTransactions.length === 0) {
+        return;
+      }
+
+      // 5. PREPARA AS NOVAS TRANSAÇÕES: Mapeia as transações encontradas,
+      // atualizando a data para o mês atual, mas mantendo o dia.
+      const newTransactionsToInsert = sourceTransactions.map(t => {
+        const oldDate = new Date(t.date);
+        // Cria a nova data no ano/mês selecionado, mantendo o dia da transação original
+        const newDate = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          oldDate.getUTCDate() // Usamos getUTCDate para evitar problemas de fuso horário
+        );
+        
+        // Remove o ID antigo para que o banco de dados gere um novo
+        const { id, ...transactionData } = t;
+
+        return {
+          ...transactionData,
+          date: newDate.toISOString().split('T')[0], // Formata para 'YYYY-MM-DD'
+          user_id: session.user.id,
+        };
+      });
+
+      // 6. SALVA NO BANCO DE DADOS E ATUALIZA O ESTADO
+      if (newTransactionsToInsert.length > 0) {
+        const { data, error } = await supabase
+          .from('transactions')
+          .insert(newTransactionsToInsert)
+          .select();
+
+        if (error) {
+          console.error('Error replicating fixed transactions:', error);
+        } else if (data) {
+          // Adiciona as novas transações ao estado local para atualizar a UI
+          setTransactions(prev => [...prev, ...data]);
+          alert(`${data.length} transações fixas (receitas e despesas) foram replicadas do mês anterior!`);
+        }
+      }
+    };
+
+    replicateFixedTransactions();
+  }, [currentDate, session, allSortedTransactions, setTransactions]); // Dependências do useEffect
+  
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
