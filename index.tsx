@@ -660,7 +660,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-                        const responseSchema = {
+            const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
@@ -778,7 +778,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
-            switch (responseJson.action) {
+                        switch (responseJson.action) {
                 case 'addTransaction':
                     if (responseJson.transaction?.amount && responseJson.transaction?.description) {
                         const t = responseJson.transaction;
