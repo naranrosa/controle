@@ -218,20 +218,24 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
     const recentTransactions = useMemo(() => transactions.slice(0, 3), [transactions]);
 
     const { natanExpenses, jussaraExpenses } = useMemo(() => {
-        let natanTotal = 0;
-        let jussaraTotal = 0;
-        transactions.filter(t => t.flow === 'expense').forEach(t => {
+    let natanTotal = 0;
+    let jussaraTotal = 0;
+    transactions
+        .filter(t => t.flow === 'expense') // 1. Pega apenas as despesas
+        .forEach(t => {
+            // 2. Soma apenas se a pessoa for EXATAMENTE 'Natan'
             if (t.person === 'Natan') {
                 natanTotal += t.amount;
+            
+            // 3. Soma apenas se a pessoa for EXATAMENTE 'Jussara'
             } else if (t.person === 'Jussara') {
                 jussaraTotal += t.amount;
-            } else if (t.person === 'Ambos') {
-                natanTotal += t.amount / 2;
-                jussaraTotal += t.amount / 2;
             }
+            // 4. Note que não há um 'else' ou 'else if' para 'Ambos'.
+            // Portanto, essas transações são ignoradas neste cálculo.
         });
-        return { natanExpenses: natanTotal, jussaraExpenses: jussaraTotal };
-    }, [transactions]);
+    return { natanExpenses: natanTotal, jussaraExpenses: jussaraTotal };
+}, [transactions]);
 
 
     return (
