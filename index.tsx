@@ -665,14 +665,13 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 properties: {
                     action: {
                         type: Type.STRING,
-                        // ADICIONAMOS 'updateTransaction' AQUI
-                        enum: ["addTransaction", "updateTransaction", "answerQuery", "addGoal", "updateGoal", "deleteGoal", "addBudget", "updateBudget", "deleteBudget"],
+                        enum: ["addTransaction", "updateTransaction", "deleteTransaction", "answerQuery", "addGoal", "updateGoal", "deleteGoal", "addBudget", "updateBudget", "deleteBudget"],
                         description: "A ação a ser tomada."
                     },
-                    transaction: { // Usado para ADICIONAR uma nova transação
+                    transaction: {
                         type: Type.OBJECT,
                         properties: {
-                            flow: { type: Type.STRING, enum: ["income", "expense"] },
+                            flow: { type: Type.STRING, enum: ["income", "expense"], description: "Indica se é uma entrada (income) ou saída (expense) de dinheiro." },
                             description: { type: Type.STRING },
                             amount: { type: Type.NUMBER },
                             category: { type: Type.STRING, enum: allCategories },
@@ -680,7 +679,6 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                             type: { type: Type.STRING, enum: ["fixo", "variável"] },
                         },
                     },
-                    // NOVA PROPRIEDADE PARA ATUALIZAR TRANSAÇÕES
                     transactionUpdate: {
                         type: Type.OBJECT,
                         properties: {
@@ -702,26 +700,39 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                         },
                         description: "Objeto usado para atualizar uma transação existente."
                     },
+                    transactionIdentifier: {
+                        type: Type.OBJECT,
+                        properties: {
+                            description: { type: Type.STRING, description: "A descrição da transação a ser excluída. Ex: 'Taxa casa'" }
+                        },
+                        description: "Objeto usado para identificar uma transação a ser excluída."
+                    },
                     goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
                     budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário." }
                 }
             };
 
-            const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
+                        const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
             Histórico de transações recente (as 5 últimas): ${JSON.stringify(transactions.slice(0, 5))}.
             Metas atuais: ${JSON.stringify(goals)}.
             Teto de gastos (orçamento) atual: ${JSON.stringify(budgets)}.
 
-            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta.
-            1.  Se o usuário quer REGISTRAR uma nova despesa ou receita, use a ação 'addTransaction'.
-            2.  Se o usuário quer CORRIGIR, MUDAR ou ALTERAR uma transação que acabou de mencionar ou que está no histórico recente, use a ação 'updateTransaction'. Para identificar a transação a ser alterada, use a descrição dela. No campo 'updates', forneça APENAS os campos que devem ser alterados.
-            3.  Se o usuário está apenas fazendo uma pergunta ou conversando, use a ação 'answerQuery' para responder de forma amigável.
+            Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta entre adicionar, atualizar, excluir ou responder.
+            1.  ADICIONAR: Se o usuário quer registrar algo novo, use 'addTransaction'.
+            2.  ATUALIZAR: Se o usuário quer CORRIGIR, MUDAR, ALTERAR ou EDITAR uma transação existente, use 'updateTransaction'.
+            3.  EXCLUIR: Se o usuário quer REMOVER, APAGAR ou EXCLUIR uma transação, use 'deleteTransaction'.
+            4.  RESPONDER: Se for apenas uma pergunta, use 'answerQuery'.
 
-            Exemplos de como usar a ação de atualização ('updateTransaction'):
-            - Mensagem: "a despesa casa é de ambos" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'casa' }, updates: { person: 'Ambos' } } }
-            - Mensagem: "o valor do almoço foi 50 reais na verdade" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'almoço' }, updates: { amount: 50 } } }
-            - Mensagem: "mude a categoria do ifood para alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
+            Exemplos de ATUALIZAÇÃO ('updateTransaction'):
+            - "a despesa casa é de ambos" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'casa' }, updates: { person: 'Ambos' } } }
+            - "edite o ifood para a categoria alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
+            - "o valor do almoço foi 50 reais na verdade" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'almoço' }, updates: { amount: 50 } } }
+
+            Exemplos de EXCLUSÃO ('deleteTransaction'):
+            - "exclua a despesa casa" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'casa' } }
+            - "pode remover o lançamento do uber" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'uber' } }
+            - "apague o gasto com farmácia" -> { action: 'deleteTransaction', transactionIdentifier: { description: 'farmácia' } }
 
             Mensagem do usuário: "${input}"`;
 
@@ -734,7 +745,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
-            switch (responseJson.action) {
+                        switch (responseJson.action) {
                 case 'addTransaction':
                     if (responseJson.transaction?.amount && responseJson.transaction?.description) {
                         const t = responseJson.transaction;
@@ -756,8 +767,49 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                         }
                     }
                     break;
-                // Adicione casos para 'addGoal', 'addBudget' etc., seguindo o padrão de 'addTransaction'
-                // (fazer a chamada ao Supabase e depois atualizar o estado local)
+
+                case 'updateTransaction':
+                    if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
+                        const { identifier, updates } = responseJson.transactionUpdate;
+                        const transactionToUpdate = transactions.find(t => t.description.toLowerCase().includes(identifier.description.toLowerCase()));
+
+                        if (transactionToUpdate) {
+                            const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).select();
+                            if (error) {
+                                aiResponseText = `Erro ao atualizar a transação.`;
+                                console.error(error);
+                            } else if (data) {
+                                setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
+                                const changedFields = Object.keys(updates).join(', ');
+                                aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}". O(s) campo(s) '${changedFields}' foi/foram alterado(s).`;
+                            }
+                        } else {
+                            aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}' para atualizar.`;
+                        }
+                    }
+                    break;
+
+                case 'deleteTransaction':
+                    if (responseJson.transactionIdentifier?.description) {
+                        const { description } = responseJson.transactionIdentifier;
+                        const transactionToDelete = transactions.find(t => t.description.toLowerCase().includes(description.toLowerCase()));
+
+                        if (transactionToDelete) {
+                            const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
+
+                            if (error) {
+                                aiResponseText = `Erro ao excluir a transação '${description}'.`;
+                                console.error(error);
+                            } else {
+                                setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
+                                aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída com sucesso.`;
+                            }
+                        } else {
+                            aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}' para excluir.`;
+                        }
+                    }
+                    break;
+
                 case 'answerQuery':
                     if (responseJson.answer) {
                        aiResponseText = responseJson.answer;
