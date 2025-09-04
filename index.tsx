@@ -134,51 +134,44 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
 
     // 2. Estados para controlar os campos do formulário
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    
-    // 3. A função handleSignUp completa
-    const handleSignUp = async () => {
-        // Validação simples para garantir que o nome não está vazio.
-        // Isso ajuda a prevenir erros no trigger se a coluna 'display_name' for NOT NULL.
-        if (!name.trim()) {
-            alert("Por favor, preencha seu nome.");
-            return;
-        }
-    
-        setLoading(true); // Ativa o estado de carregamento para o botão
-    
-        const { data, error } = await supabase.auth.signUp({
-            email: email,
-            password: password,
-            options: {
-                data: {
-                    // Esta é a parte crucial.
-                    // A chave 'display_name' corresponde ao que seu trigger espera.
-                    // O valor 'name' vem do estado do formulário.
-                    display_name: name
-                }
-            }
-        });
-    
-        if (error) {
-            // Se houver um erro, exibe a mensagem para o usuário.
-            alert("Erro no cadastro: " + error.message);
-        } else if (data.user) {
-            // Se o cadastro for bem-sucedido, informa o usuário.
-            // A sessão do usuário 'data.session' pode ser nula se a confirmação de email estiver ativada.
+const [email, setEmail] = useState('');
+const [password, setPassword] = useState('');
+const [loading, setLoading] = useState(false);
+
+const handleSignUp = async () => {
+    setLoading(true);
+
+    // Etapa 1: Cadastrar o usuário (sem passar metadados, pois não precisamos mais)
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+    });
+
+    if (signUpError) {
+        alert("Erro no cadastro: " + signUpError.message);
+        setLoading(false);
+        return; // Interrompe a função se o cadastro falhar
+    }
+
+    // Se o cadastro foi bem-sucedido, o trigger criou o perfil com "Novo Usuário".
+    // Agora, vamos atualizá-lo com o nome correto.
+    if (signUpData.user) {
+        // Etapa 2: Atualizar o perfil recém-criado
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ display_name: name }) // Atualiza a coluna 'display_name'
+            .eq('id', signUpData.user.id); // Onde o 'id' corresponde ao do usuário recém-criado
+
+        if (updateError) {
+            // Informa sobre o erro de atualização, mas o cadastro em si funcionou
+            alert("Cadastro realizado, mas houve um erro ao salvar seu nome: " + updateError.message);
+        } else {
             alert('Cadastro realizado com sucesso! Verifique sua caixa de entrada para confirmar seu email.');
-            // Opcional: Você pode limpar os campos do formulário aqui se desejar
-            setName('');
-            setEmail('');
-            setPassword('');
-            // E redirecionar para a tela de login
-            // setView('signIn'); // (Se você tiver um estado 'view' para controlar a tela)
         }
+    }
     
-        setLoading(false); // Desativa o estado de carregamento
-    };
+    setLoading(false);
+};
 
     // 4. Função de Login (SignIn) customizada
     const handleSignIn = async () => {
