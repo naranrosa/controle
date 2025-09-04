@@ -129,9 +129,62 @@ const MonthNavigator = ({ currentDate, setCurrentDate }: { currentDate: Date, se
 // --- SCREEN COMPONENTS ---
 
 const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => void }) => {
-    // Nota: Para o fluxo de cadastro, você precisará adicionar campos de metadados
-    // para 'display_name' para que o trigger do banco de dados funcione corretamente.
-    // A Auth UI padrão não suporta isso nativamente, exigindo um formulário customizado.
+    // 1. Estado para controlar a visão (Entrar vs. Cadastrar)
+    const [view, setView] = useState<'signIn' | 'signUp'>('signIn');
+
+    // 2. Estados para controlar os campos do formulário
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    // 3. Função de Cadastro (SignUp) customizada
+    const handleSignUp = async () => {
+        setLoading(true);
+        const { error } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: {
+                    // Isso envia o nome para o trigger do seu banco de dados!
+                    display_name: name
+                }
+            }
+        });
+        if (error) {
+            alert("Erro no cadastro: " + error.message);
+        } else {
+            alert('Cadastro realizado! Verifique seu email para confirmar a conta.');
+            // Volta para a tela de login após o cadastro
+            setView('signIn');
+        }
+        setLoading(false);
+    };
+
+    // 4. Função de Login (SignIn) customizada
+    const handleSignIn = async () => {
+        setLoading(true);
+        const { error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        });
+        if (error) {
+            alert("Erro no login: " + error.message);
+        }
+        // Se o login for bem-sucedido, o onAuthStateChange no componente App cuidará do resto.
+        setLoading(false);
+    };
+
+    // 5. Função que decide qual ação tomar ao submeter o formulário
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (view === 'signUp') {
+            handleSignUp();
+        } else {
+            handleSignIn();
+        }
+    };
+
     return (
         <div style={styles.loginContainer}>
              <button onClick={toggleTheme} style={styles.loginThemeToggleButton}>
@@ -140,33 +193,59 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
             <div style={styles.loginBox}>
                 <h2 style={styles.loginTitle}>Bem-vindo(a) ao</h2>
                 <h1 style={styles.loginAppName}>Financeiro a Dois</h1>
-                <div style={{marginTop: '2rem'}}>
-                    <Auth
-                        supabaseClient={supabase}
-                        appearance={{ theme: ThemeSupa }}
-                        theme={theme === 'dark' ? 'dark' : 'default'}
-                        view="sign_in"
-                        showLinks={true}
-                        providers={[]}
-                        localization={{
-                            variables: {
-                                sign_up: {
-                                    email_label: 'Seu email',
-                                    password_label: 'Crie uma senha',
-                                    button_label: 'Cadastrar',
-                                    // Adicionar campo de nome exigiria customização
-                                },
-                                sign_in: {
-                                    email_label: 'Seu email',
-                                    password_label: 'Sua senha',
-                                    email_input_placeholder: 'seu@email.com',
-                                    password_input_placeholder: 'Sua senha',
-                                    button_label: 'Entrar',
-                                },
-                            },
-                        }}
+
+                {/* Este é o novo formulário customizado */}
+                <form onSubmit={handleSubmit} style={{...styles.form, gap: '1rem', marginTop: '2rem'}}>
+                    {/* O campo "Nome" só aparece na tela de cadastro */}
+                    {view === 'signUp' && (
+                        <input
+                            style={styles.input}
+                            type="text"
+                            placeholder="Seu nome"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                        />
+                    )}
+
+                    <input
+                        style={styles.input}
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
                     />
-                </div>
+                    <input
+                        style={styles.input}
+                        type="password"
+                        placeholder="Sua senha"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+
+                    <button type="submit" style={styles.button} disabled={loading}>
+                        {loading ? 'Carregando...' : (view === 'signIn' ? 'Entrar' : 'Cadastrar')}
+                    </button>
+                </form>
+
+                {/* Links para alternar entre Login e Cadastro */}
+                {view === 'signIn' ? (
+                    <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
+                        Não tem uma conta?{' '}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setView('signUp'); }} style={{ color: 'var(--primary-color)' }}>
+                            Cadastre-se
+                        </a>
+                    </p>
+                ) : (
+                    <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
+                        Já tem uma conta?{' '}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setView('signIn'); }} style={{ color: 'var(--primary-color)' }}>
+                            Faça o login
+                        </a>
+                    </p>
+                )}
             </div>
         </div>
     );
