@@ -15,7 +15,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// --- TYPES AND INTERFACES ---
+// --- TYPES AND INTERFACES (MODELO DE FAMÍLIA) ---
 interface Transaction {
   id: string;
   person: string; // Dinâmico, ex: 'Carlos', 'Diana', 'Ambos'
@@ -25,7 +25,7 @@ interface Transaction {
   amount: number;
   date: string; // YYYY-MM-DD
   description: string;
-  family_id?: string;
+  family_id?: string; // Chave estrangeira para 'families'
 }
 
 interface Goal {
@@ -33,14 +33,14 @@ interface Goal {
   name: string;
   targetAmount: number;
   currentAmount: number;
-  family_id?: string;
+  family_id?: string; // Chave estrangeira para 'families'
 }
 
 interface Budget {
     id: string;
     category: string;
     amount: number;
-    family_id?: string;
+    family_id?: string; // Chave estrangeira para 'families'
 }
 
 interface ChatMessage {
@@ -50,6 +50,7 @@ interface ChatMessage {
     isLoading?: boolean;
 }
 
+// Interface para os membros da família, vindo da tabela 'profiles'
 interface FamilyMember {
   id: string; // user id (uuid)
   display_name: string;
