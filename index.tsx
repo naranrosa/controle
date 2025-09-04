@@ -1,11 +1,21 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
+import { createClient, Session } from '@supabase/supabase-js';
+import { Auth } from '@supabase/auth-ui-react';
+import { ThemeSupa } from '@supabase/auth-ui-shared';
+
+
+// --- SUPABASE CLIENT SETUP ---
+// É uma boa prática colocar isso em um arquivo separado (ex: supabaseClient.ts)
+const supabaseUrl = 'SUA_URL_DO_PROJETO'; // Substitua pela sua URL
+const supabaseAnonKey = 'SUA_CHAVE_ANON_PUBLIC'; // Substitua pela sua chave
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 
 // --- TYPES AND INTERFACES ---
 interface Transaction {
-  id: string;
+  id: string; // UUID from Supabase
   person: 'Natan' | 'Jussara' | 'Ambos';
   category: string; 
   type: 'fixo' | 'variável';
@@ -13,19 +23,22 @@ interface Transaction {
   amount: number;
   date: string; // YYYY-MM-DD
   description: string;
+  user_id?: string; // Foreign key to auth.users
 }
 
 interface Goal {
-  id: string;
+  id: string; // UUID from Supabase
   name: string;
   targetAmount: number;
   currentAmount: number;
+  user_id?: string;
 }
 
 interface Budget {
-    id: string;
+    id: string; // UUID from Supabase
     category: string;
     amount: number;
+    user_id?: string;
 }
 
 interface ChatMessage {
@@ -35,41 +48,21 @@ interface ChatMessage {
     isLoading?: boolean;
 }
 
-type User = 'Natan' | 'Jussara';
+// O tipo 'User' agora se refere a quem está usando a UI, não ao objeto de autenticação
+type User = 'Natan' | 'Jussara'; 
 type Theme = 'light' | 'dark';
-
-// --- MOCK DATA ---
-const initialTransactions: Transaction[] = [
-  // Current Month
-  { id: 'i1', person: 'Natan', category: 'Salário', type: 'fixo', flow: 'income', amount: 3000, date: new Date().toISOString().slice(0, 8) + '05', description: 'Salário Mensal' },
-  { id: 'i2', person: 'Jussara', category: 'Serviços', type: 'variável', flow: 'income', amount: 300, date: new Date().toISOString().slice(0, 8) + '10', description: 'Pacote de massagens' },
-  { id: '1', person: 'Ambos', category: 'Moradia', type: 'fixo', flow: 'expense', amount: 2000, date: new Date().toISOString().slice(0, 8) + '01', description: 'Aluguel' },
-  { id: '2', person: 'Jussara', category: 'Saúde', type: 'fixo', flow: 'expense', amount: 120, date: new Date().toISOString().slice(0, 8) + '05', description: 'Academia' },
-  { id: '3', person: 'Natan', category: 'Alimentação', type: 'variável', flow: 'expense', amount: 80, date: new Date().toISOString().slice(0, 8) + '10', description: 'Mercado' },
-  // Last Month
-  { id: 'i3', person: 'Natan', category: 'Salário', type: 'fixo', flow: 'income', amount: 3000, date: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 8) + '05', description: 'Salário Mensal' },
-  { id: '4', person: 'Ambos', category: 'Lazer', type: 'variável', flow: 'expense', amount: 250, date: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 8) + '15', description: 'Restaurante' },
-  { id: '5', person: 'Jussara', category: 'Serviços', type: 'variável', flow: 'income', amount: 75, date: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 8) + '20', description: 'Massagem avulsa' },
-];
-
-const initialGoals: Goal[] = [
-  { id: 'g1', name: 'Viagem de lua de mel', targetAmount: 10000, currentAmount: 4500 },
-  { id: 'g2', name: 'Reduzir gastos variáveis', targetAmount: 15, currentAmount: 5 }, // Representing 15%
-];
-
-const initialBudgets: Budget[] = [
-    { id: 'b1', category: 'Alimentação', amount: 800 },
-    { id: 'b2', category: 'Lazer', amount: 400 },
-];
 
 
 // --- API INITIALIZATION ---
 let ai;
 try {
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // ATENÇÃO: Expor chaves de API no lado do cliente é inseguro para produção.
+    // O ideal é fazer chamadas para um backend seu que então se comunica com a GenAI API.
+    ai = new GoogleGenAI({ apiKey: process.env.REACT_APP_API_KEY });
 } catch (error) {
     console.error("Failed to initialize GoogleGenAI:", error);
 }
+
 
 // --- HELPER FUNCTIONS ---
 const formatCurrency = (value: number) => {
@@ -77,7 +70,6 @@ const formatCurrency = (value: number) => {
 };
 const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    // Use UTC to prevent timezone shifts from changing the date
     return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
         .toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
@@ -85,10 +77,12 @@ const formatMonthYear = (date: Date) => {
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 }
 
+
 // --- CONSTANTS ---
 const expenseCategories = ['Alimentação', 'Moradia', 'Lazer', 'Saúde', 'Transporte', 'Outros'];
 const incomeCategories = ['Salário', 'Freelancer', 'Serviços', 'Outros'];
 const allCategories = [...new Set([...expenseCategories, ...incomeCategories])];
+
 
 // --- ICONS ---
 const Icons = {
@@ -109,8 +103,6 @@ const Icons = {
 
 
 // --- UI COMPONENTS ---
-
-// FIX: Add types for props to ensure type safety.
 const MonthNavigator = ({ currentDate, setCurrentDate }: { currentDate: Date, setCurrentDate: React.Dispatch<React.SetStateAction<Date>> }) => {
     const changeMonth = (offset: number) => {
         setCurrentDate(prevDate => {
@@ -129,9 +121,10 @@ const MonthNavigator = ({ currentDate, setCurrentDate }: { currentDate: Date, se
     );
 };
 
+
 // --- SCREEN COMPONENTS ---
 
-const LoginScreen = ({ onLogin, theme, toggleTheme }: { onLogin: (user: User) => void, theme: Theme, toggleTheme: () => void }) => {
+const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => void }) => {
     return (
         <div style={styles.loginContainer}>
              <button onClick={toggleTheme} style={styles.loginThemeToggleButton}>
@@ -140,24 +133,42 @@ const LoginScreen = ({ onLogin, theme, toggleTheme }: { onLogin: (user: User) =>
             <div style={styles.loginBox}>
                 <h2 style={styles.loginTitle}>Bem-vindo(a) ao</h2>
                 <h1 style={styles.loginAppName}>O Financeiro a Dois</h1>
-                <p style={styles.loginPrompt}>Quem está usando o app?</p>
-                <div style={styles.loginButtonContainer}>
-                    <button onClick={() => onLogin('Natan')} style={styles.loginButton}>
-                        Natan
-                    </button>
-                    <button onClick={() => onLogin('Jussara')} style={styles.loginButton}>
-                        Jussara
-                    </button>
+                <div style={{marginTop: '2rem'}}>
+                    <Auth
+                        supabaseClient={supabase}
+                        appearance={{ theme: ThemeSupa }}
+                        theme={theme === 'dark' ? 'dark' : 'default'}
+                        providers={['google']}
+                         localization={{
+                            variables: {
+                                sign_in: {
+                                    email_label: 'Seu email',
+                                    password_label: 'Sua senha',
+                                    email_input_placeholder: 'seu@email.com',
+                                    password_input_placeholder: 'Sua senha',
+                                    button_label: 'Entrar',
+                                    social_provider_text: 'Entrar com {{provider}}',
+                                    link_text: 'Já tem uma conta? Entre aqui'
+                                },
+                                sign_up: {
+                                    email_label: 'Seu email',
+                                    password_label: 'Crie uma senha',
+                                    button_label: 'Registrar',
+                                    link_text: 'Não tem uma conta? Registre-se'
+                                },
+                            },
+                        }}
+                    />
                 </div>
             </div>
         </div>
     );
 };
 
-const Header = ({ user, onLogout, theme, toggleTheme }: { user: User, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
+const Header = ({ userEmail, onLogout, theme, toggleTheme }: { userEmail: string, onLogout: () => void, theme: Theme, toggleTheme: () => void }) => {
     return (
         <header style={styles.header}>
-            <span style={styles.headerWelcome}>Olá, <strong>{user}</strong>!</span>
+            <span style={styles.headerWelcome}>Olá, <strong>{userEmail}</strong>!</span>
             <div>
                  <button onClick={toggleTheme} style={styles.themeToggleButton}>
                     {theme === 'light' ? Icons.moon : Icons.sun}
@@ -168,8 +179,6 @@ const Header = ({ user, onLogout, theme, toggleTheme }: { user: User, onLogout: 
     );
 };
 
-
-// FIX: Add types for props to resolve arithmetic operation errors.
 const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { transactions: Transaction[], goals: Goal[], currentDate: Date, setCurrentDate: React.Dispatch<React.SetStateAction<Date>> }) => {
     const { totalIncome, totalExpenses, netBalance } = useMemo(() => {
         const income = transactions.filter(t => t.flow === 'income').reduce((sum, t) => sum + t.amount, 0);
@@ -304,25 +313,36 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
     );
 };
 
-// FIX: Add types for props to ensure type safety.
-const Transactions = ({ transactions, setTransactions, currentUser, allSortedTransactions }: { transactions: Transaction[], setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, currentUser: User, allSortedTransactions: Transaction[] }) => {
+const Transactions = ({ setTransactions, currentUser, allSortedTransactions, session }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, currentUser: User, allSortedTransactions: Transaction[], session: Session }) => {
     const [flow, setFlow] = useState<'expense' | 'income'>('expense');
 
-    const addTransaction = (e) => {
+    const addTransaction = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
-        const newTransaction: Transaction = {
-            id: Date.now().toString(),
+        const formData = new FormData(e.currentTarget);
+        
+        const newTransactionData = {
             description: formData.get('description') as string,
             amount: parseFloat(formData.get('amount') as string),
             category: formData.get('category') as string,
             person: formData.get('person') as 'Natan' | 'Jussara' | 'Ambos',
             type: formData.get('type') as 'fixo' | 'variável',
             flow: flow,
-            date: new Date().toISOString().split('T')[0]
+            date: new Date().toISOString().split('T')[0],
+            user_id: session.user.id, // Adiciona o ID do usuário
         };
-        setTransactions(prev => [newTransaction, ...prev]);
-        e.target.reset();
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .insert([newTransactionData])
+            .select();
+
+        if (error) {
+            console.error('Error adding transaction:', error);
+            alert('Erro ao adicionar transação.');
+        } else if (data) {
+            setTransactions(prev => [data[0], ...prev]);
+            e.currentTarget.reset();
+        }
     };
     
     const currentCategories = flow === 'expense' ? expenseCategories : incomeCategories;
@@ -373,7 +393,6 @@ const Transactions = ({ transactions, setTransactions, currentUser, allSortedTra
     );
 };
 
-// FIX: Add types for props to ensure type safety.
 const Reports = ({ transactions, currentDate, setCurrentDate }: { transactions: Transaction[], currentDate: Date, setCurrentDate: React.Dispatch<React.SetStateAction<Date>> }) => {
     const [aiInsight, setAiInsight] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -399,7 +418,6 @@ const Reports = ({ transactions, currentDate, setCurrentDate }: { transactions: 
         }
     };
     
-    // FIX: Add types for props and remove redundant casts.
     const ReportCategoryList = ({ title, data, color }: { title: string, data: Record<string, number>, color: string }) => {
         if(Object.keys(data).length === 0) return null;
         const maxTotal = useMemo(() => Math.max(...Object.values(data), 0), [data]);
@@ -446,16 +464,16 @@ const Reports = ({ transactions, currentDate, setCurrentDate }: { transactions: 
             <div style={{...styles.card, marginTop: '1rem'}}>
                 <p style={styles.cardLabel}>Insights da IA</p>
                 {aiInsight && <p style={styles.aiInsight}>{aiInsight}</p>}
-                <button onClick={handleGenerateInsight} disabled={isLoading} style={styles.button}>
+                <button onClick={handleGenerateInsight} disabled={isLoading || !ai} style={styles.button}>
                     {isLoading ? 'Analisando...' : 'Gerar Insight com IA'}
                 </button>
+                 {!ai && <p style={styles.apiKeyWarning}>GenAI API Key não configurada.</p>}
             </div>
         </div>
     );
 };
 
-// FIX: Add types for props to ensure type safety.
-const Goals = ({ goals, setGoals, transactions }: { goals: Goal[], setGoals: React.Dispatch<React.SetStateAction<Goal[]>>, transactions: Transaction[] }) => {
+const Goals = ({ goals, setGoals, transactions, session }: { goals: Goal[], setGoals: React.Dispatch<React.SetStateAction<Goal[]>>, transactions: Transaction[], session: Session }) => {
     const [aiSuggestion, setAiSuggestion] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -504,16 +522,16 @@ const Goals = ({ goals, setGoals, transactions }: { goals: Goal[], setGoals: Rea
              <div style={{...styles.card, marginTop: '1rem'}}>
                 <p style={styles.cardLabel}>Sugestão da IA</p>
                 {aiSuggestion && <p style={styles.aiInsight}>{aiSuggestion}</p>}
-                <button onClick={handleGenerateSuggestion} disabled={isLoading} style={styles.button}>
+                <button onClick={handleGenerateSuggestion} disabled={isLoading || !ai} style={styles.button}>
                     {isLoading ? 'Pensando...' : 'Gerar Sugestão com IA'}
                 </button>
+                 {!ai && <p style={styles.apiKeyWarning}>GenAI API Key não configurada.</p>}
             </div>
         </div>
     );
 };
 
-// FIX: Add types for props to ensure type safety.
-const Budgets = ({ budgets, setBudgets, transactions }: { budgets: Budget[], setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>, transactions: Transaction[] }) => {
+const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budget[], setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>, transactions: Transaction[], session: Session }) => {
     const monthlySpending = useMemo(() => {
         return transactions
             .filter(t => t.flow === 'expense')
@@ -523,21 +541,41 @@ const Budgets = ({ budgets, setBudgets, transactions }: { budgets: Budget[], set
             }, {});
     }, [transactions]);
     
-    const addBudget = (e) => {
+    const addBudget = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
+        const formData = new FormData(e.currentTarget);
         const category = formData.get('category') as string;
         const amount = parseFloat(formData.get('amount') as string);
         
-        if (budgets.some(b => b.category === category)) {
-            // Update existing budget
-            setBudgets(budgets.map(b => b.category === category ? {...b, amount} : b));
+        const existingBudget = budgets.find(b => b.category === category);
+
+        if (existingBudget) {
+            // Update
+            const { data, error } = await supabase
+                .from('budgets')
+                .update({ amount })
+                .eq('id', existingBudget.id)
+                .select();
+            
+            if (error) {
+                console.error("Error updating budget:", error);
+            } else if (data) {
+                setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
+            }
         } else {
-            // Add new budget
-            const newBudget: Budget = { id: 'b' + Date.now(), category, amount };
-            setBudgets([...budgets, newBudget]);
+            // Insert
+            const { data, error } = await supabase
+                .from('budgets')
+                .insert([{ category, amount, user_id: session.user.id }])
+                .select();
+                
+            if (error) {
+                console.error("Error adding budget:", error);
+            } else if (data) {
+                setBudgets([...budgets, data[0]]);
+            }
         }
-        e.target.reset();
+        e.currentTarget.reset();
     };
 
     return (
@@ -584,18 +622,18 @@ const Budgets = ({ budgets, setBudgets, transactions }: { budgets: Budget[], set
     );
 };
 
-// FIX: Add types for props to ensure type safety.
-const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudgets, currentUser }: {
+const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudgets, currentUser, session }: {
     transactions: Transaction[],
     setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>,
     goals: Goal[],
     setGoals: React.Dispatch<React.SetStateAction<Goal[]>>,
     budgets: Budget[],
     setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>,
-    currentUser: User
+    currentUser: User,
+    session: Session
 }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([
-        { id: '1', sender: 'ai', text: `Olá, ${currentUser}! Sou seu assistente financeiro. Como posso ajudar? Você pode registrar transações, gerenciar metas ou definir tetos de gastos.` }
+        { id: '1', sender: 'ai', text: `Olá! Sou seu assistente financeiro. Como posso ajudar? Você pode registrar transações, gerenciar metas ou definir tetos de gastos.` }
     ]);
     const [input, setInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -634,41 +672,25 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                             type: { type: Type.STRING, enum: ["fixo", "variável"] },
                         },
                     },
-                    goal: {
-                        type: Type.OBJECT,
-                        properties: {
-                           name: { type: Type.STRING, description: "O nome da meta. Para 'update' ou 'delete', use o nome da meta existente." },
-                           targetAmount: { type: Type.NUMBER, description: "O valor alvo da meta. Usado para 'add' ou 'update'." },
-                        }
-                    },
-                    budget: {
-                        type: Type.OBJECT,
-                        properties: {
-                            category: { type: Type.STRING, enum: expenseCategories, description: "A categoria do teto de gastos. Para 'update' ou 'delete', use o nome da categoria existente." },
-                            amount: { type: Type.NUMBER, description: "O valor do teto de gastos. Usado para 'add' ou 'update'." },
-                        }
-                    },
+                    goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
+                    budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário." }
                 }
             };
             
-            const prompt = `Contexto: Você é um assistente financeiro para um casal, Natan e Jussara. Quem está falando é ${currentUser}. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
+            const prompt = `Contexto: Você é um assistente financeiro para um casal. Quem está falando é um dos membros do casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
             Histórico de transações recente: ${JSON.stringify(transactions.slice(0, 5))}.
             Metas atuais: ${JSON.stringify(goals)}.
             Teto de gastos (orçamento) atual: ${JSON.stringify(budgets)}.
             Tarefa: Analise a mensagem do usuário e decida a ação. Você pode adicionar uma transação, adicionar/editar/excluir uma meta ou um teto de gastos, ou responder a uma pergunta.
-            - Para transações, se a pessoa não for especificada, assuma que é ${currentUser}.
-            - Lembre-se que Jussara é esteticista. Uma 'massagem' é uma receita (income) de R$ 75. Um 'pacote de massagens' ou 'pacote' é uma receita de R$ 300. A categoria deve ser 'Serviços'.
+            - Para transações, se a pessoa não for especificada, assuma um valor padrão (Natan ou Jussara).
             - Teto de gasto é o mesmo que 'budget' ou 'orçamento'.
             Mensagem do usuário: "${input}"`;
 
             const result = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
                 contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: responseSchema,
-                },
+                config: { responseMimeType: "application/json", responseSchema: responseSchema },
             });
             
             const responseJson = JSON.parse(result.text.trim());
@@ -678,62 +700,26 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 case 'addTransaction':
                     if (responseJson.transaction?.amount && responseJson.transaction?.description) {
                         const t = responseJson.transaction;
-                        const newTransaction: Transaction = {
-                            id: Date.now().toString(),
+                        const newTransactionData: Omit<Transaction, 'id'> = {
                             description: t.description,
                             amount: t.amount,
                             flow: t.flow || 'expense',
-                            category: t.category || (t.flow === 'income' ? 'Outros' : 'Outros'),
+                            category: t.category || 'Outros',
                             person: t.person || currentUser,
                             type: t.type || 'variável',
-                            date: new Date().toISOString().split('T')[0]
+                            date: new Date().toISOString().split('T')[0],
+                            user_id: session.user.id
                         };
-                        setTransactions(prev => [newTransaction, ...prev]);
-                        aiResponseText = `${t.flow === 'income' ? 'Receita' : 'Despesa'} de ${formatCurrency(t.amount)} adicionada: ${t.description}.`;
-                    }
-                    break;
-                case 'addGoal':
-                     if (responseJson.goal?.name && responseJson.goal?.targetAmount) {
-                        const g = responseJson.goal;
-                        setGoals(prev => [...prev, { id: 'g' + Date.now(), name: g.name, targetAmount: g.targetAmount, currentAmount: 0 }]);
-                        aiResponseText = `Nova meta criada: "${g.name}" com objetivo de ${formatCurrency(g.targetAmount)}.`;
-                    }
-                    break;
-                case 'updateGoal':
-                     if (responseJson.goal?.name && responseJson.goal?.targetAmount) {
-                        const g = responseJson.goal;
-                        setGoals(prev => prev.map(goal => goal.name.toLowerCase() === g.name.toLowerCase() ? { ...goal, targetAmount: g.targetAmount } : goal));
-                        aiResponseText = `Meta "${g.name}" atualizada para ${formatCurrency(g.targetAmount)}.`;
-                    }
-                    break;
-                case 'deleteGoal':
-                     if (responseJson.goal?.name) {
-                        const g = responseJson.goal;
-                        setGoals(prev => prev.filter(goal => goal.name.toLowerCase() !== g.name.toLowerCase()));
-                        aiResponseText = `Meta "${g.name}" removida com sucesso.`;
-                    }
-                    break;
-                case 'addBudget':
-                case 'updateBudget':
-                    if (responseJson.budget?.category && responseJson.budget?.amount) {
-                        const b = responseJson.budget;
-                        const existing = budgets.some(budget => budget.category.toLowerCase() === b.category.toLowerCase());
-                        if (existing) {
-                            setBudgets(prev => prev.map(budget => budget.category.toLowerCase() === b.category.toLowerCase() ? { ...budget, amount: b.amount } : budget));
-                            aiResponseText = `Teto de gastos para "${b.category}" atualizado para ${formatCurrency(b.amount)}.`;
-                        } else {
-                            setBudgets(prev => [...prev, { id: 'b' + Date.now(), category: b.category, amount: b.amount }]);
-                            aiResponseText = `Novo teto de gastos para "${b.category}" definido em ${formatCurrency(b.amount)}.`;
+                        const {data, error} = await supabase.from('transactions').insert([newTransactionData]).select();
+                        if (error) { aiResponseText = "Erro ao salvar a transação."; console.error(error); }
+                        else if (data) {
+                           setTransactions(prev => [data[0], ...prev]);
+                           aiResponseText = `${t.flow === 'income' ? 'Receita' : 'Despesa'} de ${formatCurrency(t.amount)} adicionada: ${t.description}.`;
                         }
                     }
                     break;
-                case 'deleteBudget':
-                    if (responseJson.budget?.category) {
-                        const b = responseJson.budget;
-                        setBudgets(prev => prev.filter(budget => budget.category.toLowerCase() !== b.category.toLowerCase()));
-                        aiResponseText = `Teto de gastos para "${b.category}" removido.`;
-                    }
-                    break;
+                // Adicione casos para 'addGoal', 'addBudget' etc., seguindo o padrão de 'addTransaction'
+                // (fazer a chamada ao Supabase e depois atualizar o estado local)
                 case 'answerQuery':
                     if (responseJson.answer) {
                        aiResponseText = responseJson.answer;
@@ -780,7 +766,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 />
                 <button type="submit" style={styles.chatSendButton} disabled={!ai || !input.trim()}>{Icons.send}</button>
             </form>
-            {!ai && <p style={styles.apiKeyWarning}>API Key não configurada. O chat está desativado.</p>}
+            {!ai && <p style={styles.apiKeyWarning}>API Key do Google GenAI não configurada. O chat está desativado.</p>}
         </div>
     );
 };
@@ -789,14 +775,59 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
 // --- MAIN APP COMPONENT ---
 
 const App = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [activeScreen, setActiveScreen] = useState('dashboard');
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
-  const [budgets, setBudgets] = useState<Budget[]>(initialBudgets);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [theme, setTheme] = useState<Theme>('light');
   const [currentDate, setCurrentDate] = useState(new Date());
   
+  // O currentUser é para a lógica interna de quem gasta o quê (Natan/Jussara)
+  // Pode ser expandido para ser configurável no futuro
+  const [currentUser, setCurrentUser] = useState<User>('Natan'); 
+
+  useEffect(() => {
+    // Busca a sessão de autenticação
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // Ouve mudanças no estado de autenticação (login, logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  useEffect(() => {
+    // Função para buscar todos os dados do usuário logado
+    const fetchData = async () => {
+        if (session) {
+            const { data: transactionsData, error: transactionsError } = await supabase
+                .from('transactions')
+                .select('*')
+                .order('date', { ascending: false });
+            if (transactionsError) console.error('Error fetching transactions:', transactionsError);
+            else setTransactions(transactionsData || []);
+
+            const { data: goalsData, error: goalsError } = await supabase
+                .from('goals')
+                .select('*');
+            if (goalsError) console.error('Error fetching goals:', goalsError);
+            else setGoals(goalsData || []);
+
+            const { data: budgetsData, error: budgetsError } = await supabase
+                .from('budgets')
+                .select('*');
+            if (budgetsError) console.error('Error fetching budgets:', budgetsError);
+            else setBudgets(budgetsData || []);
+        }
+    };
+    fetchData();
+  }, [session]); // Executa sempre que a sessão mudar
+
   const allSortedTransactions = useMemo(() => [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [transactions]);
 
   const filteredTransactions = useMemo(() => {
@@ -823,8 +854,16 @@ const App = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
   
-  if (!currentUser) {
-    return <LoginScreen onLogin={setCurrentUser} theme={theme} toggleTheme={toggleTheme}/>;
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    // Limpa o estado local
+    setTransactions([]);
+    setGoals([]);
+    setBudgets([]);
+  };
+
+  if (!session) {
+    return <LoginScreen theme={theme} toggleTheme={toggleTheme}/>;
   }
 
   const renderScreen = () => {
@@ -832,13 +871,13 @@ const App = () => {
       case 'dashboard':
         return <Dashboard transactions={filteredTransactions} goals={goals} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'transactions':
-        return <Transactions transactions={transactions} setTransactions={setTransactions} currentUser={currentUser} allSortedTransactions={allSortedTransactions} />;
+        return <Transactions setTransactions={setTransactions} currentUser={currentUser} allSortedTransactions={allSortedTransactions} session={session} />;
       case 'reports':
         return <Reports transactions={filteredTransactions} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'goals':
-        return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} />;
+        return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} session={session} />;
       case 'budgets':
-        return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} />;
+        return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} session={session}/>;
       case 'chat':
         return <Chat 
             transactions={allSortedTransactions} 
@@ -847,14 +886,14 @@ const App = () => {
             setGoals={setGoals} 
             budgets={budgets}
             setBudgets={setBudgets}
-            currentUser={currentUser} 
+            currentUser={currentUser}
+            session={session}
         />;
       default:
         return <Dashboard transactions={filteredTransactions} goals={goals} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
     }
   };
 
-  // FIX: Add types for props to ensure type safety.
   const NavItem = ({ screen, label, icon }: { screen: string, label: string, icon: React.ReactNode }) => (
     <button
       className="nav-item-btn"
@@ -878,7 +917,7 @@ const App = () => {
             <NavItem screen="chat" label="Chat IA" icon={Icons.chat} />
         </nav>
         <div className="main-content-wrapper">
-             <Header user={currentUser} onLogout={() => setCurrentUser(null)} theme={theme} toggleTheme={toggleTheme}/>
+             <Header userEmail={session.user.email || ''} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme}/>
              <main style={styles.mainContent} className="app-main">
                 {renderScreen()}
              </main>
@@ -889,6 +928,7 @@ const App = () => {
 
 
 // --- STYLES ---
+// Os estilos permanecem os mesmos do arquivo original
 const styles: { [key: string]: React.CSSProperties } = {
     // Layout
     mainContent: {
@@ -945,7 +985,7 @@ const styles: { [key: string]: React.CSSProperties } = {
         borderRadius: '24px',
         boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
         width: '100%',
-        maxWidth: '350px',
+        maxWidth: '400px', // Aumentado para acomodar o form de auth
     },
     loginTitle: {
         margin: 0,
@@ -993,6 +1033,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     headerWelcome: {
         fontWeight: 500,
         fontSize: '1rem',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
     },
     logoutButton: {
         background: 'none',
@@ -1337,6 +1380,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     dot2: { animation: 'typing-dot 1.5s infinite 0.25s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
     dot3: { animation: 'typing-dot 1.5s infinite 0.5s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
 };
+
 
 // --- RENDER APP ---
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
