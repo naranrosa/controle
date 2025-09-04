@@ -660,13 +660,19 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-                        const responseSchema = {
+            const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
                         type: Type.STRING,
-                        enum: ["addTransaction", "updateTransaction", "deleteTransaction", "answerQuery", "addGoal", "updateGoal", "deleteGoal", "addBudget", "updateBudget", "deleteBudget"],
-                        description: "A ação a ser tomada."
+                        enum: [
+                            "addTransaction", "addMultipleTransactions", 
+                            "updateTransaction", "deleteTransaction",
+                            "addGoal", "updateGoal", "deleteGoal", 
+                            "addBudget", "updateBudget", "deleteBudget",
+                            "answerQuery"
+                        ],
+                        description: "A ação a ser tomada com base na análise da mensagem."
                     },
                     transaction: {
                         type: Type.OBJECT,
@@ -723,41 +729,83 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                         },
                         description: "Objeto usado para identificar uma transação a ser excluída."
                     },
-                    goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
-                    budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
-                    answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário." }
+                    goal: {
+                        type: Type.OBJECT,
+                        properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } }
+                    },
+                    goalUpdate: {
+                        type: Type.OBJECT,
+                        properties: {
+                            identifier: { properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } },
+                            updates: { properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } }
+                        }
+                    },
+                    goalIdentifier: {
+                        type: Type.OBJECT,
+                        properties: { name: { type: Type.STRING, description: "Nome da meta a ser excluída." } }
+                    },
+
+                    // Seção de Orçamentos (Budgets)
+                    budget: {
+                        type: Type.OBJECT,
+                        properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } }
+                    },
+                    budgetUpdate: {
+                        type: Type.OBJECT,
+                        properties: {
+                            identifier: { properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } },
+                            updates: { properties: { amount: { type: Type.NUMBER } } }
+                        }
+                    },
+                    budgetIdentifier: {
+                        type: Type.OBJECT,
+                        properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser excluído." } }
+                    },
+
+                    // Seção de Respostas (Consultoria)
+                    answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
                 }
             };
 
-                                const prompt = `Você é um assistente financeiro especialista em extrair dados de texto. Sua tarefa é converter a mensagem do usuário em uma estrutura JSON baseada nas ações disponíveis.
+            const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a gerenciar suas finanças, oferecendo tanto ferramentas de registro quanto insights valiosos.
 
-            ### REGRAS OBRIGATÓRIAS:
-            1.  **Contexto Geral:** Se o usuário especificar um contexto no início (ex: "despesas fixas para ambos"), você DEVE aplicar essas propriedades (type: 'fixo', person: 'Ambos') a TODAS as transações que encontrar na mensagem.
-            2.  **Análise de Lista:** O usuário pode fornecer uma lista de itens, frequentemente separados por novas linhas ou vírgulas, usando o formato "Descrição: Valor" ou "Descrição Valor". Identifique cada um desses pares como uma transação separada.
-            3.  **Escolha da Ação:**
-                - Use 'addMultipleTransactions' se identificar DUAS OU MAIS transações na mensagem.
-                - Use 'addTransaction' se identificar APENAS UMA transação.
-                - Use 'updateTransaction' para pedidos de CORREÇÃO ou EDIÇÃO.
-                - Use 'deleteTransaction' para pedidos de EXCLUSÃO ou REMOÇÃO.
+            ### SEU KIT DE FERRAMENTAS (AÇÕES):
+            - **Transações:** 'addMultipleTransactions', 'updateTransaction', 'deleteTransaction'.
+            - **Metas:** 'addGoal', 'updateGoal', 'deleteGoal'.
+            - **Orçamentos/Tetos:** 'addBudget', 'updateBudget', 'deleteBudget'.
+            - **Consultoria:** 'answerQuery' (para todas as perguntas e análises).
+
+            ### REGRAS DE EXECUÇÃO:
+            1.  **Análise de Intenção:** Primeiro, entenda o que o usuário quer: registrar, editar, excluir ou perguntar/analisar?
+            2.  **Contexto e Múltiplos Itens:** Se o usuário der um contexto geral (ex: "despesas fixas para ambos") ou listar vários itens, use as ações em massa ('addMultipleTransactions').
+            3.  **Atuar como Assessora:** Ao usar 'answerQuery', não seja um robô. Use os dados fornecidos (histórico, metas) para dar respostas inteligentes. Analise os números e dê conselhos práticos.
 
             ### EXEMPLOS PRÁTICOS:
 
-            #### Adicionar Múltiplas Transações:
-            # Exemplo 1 (lista simples):
-            - Usuário: "adicione ifood 50 reais e uber 30 reais"
-            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "ifood", "amount": 50, "type": "variável" }, { "description": "uber", "amount": 30, "type": "variável" } ] }
+            #### Múltiplas Transações:
+            - Usuário: "quero adicionar essas despesas fixas para ambos: Casa: R$ 568,00 e Internet: R$ 89,00"
+            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "Casa", "amount": 568, "type": "fixo", "person": "Ambos" }, { "description": "Internet", "amount": 89, "type": "fixo", "person": "Ambos" } ] }
 
-            # Exemplo 2 (lista complexa com contexto e novas linhas):
-            - Usuário: "quero adicionar essas despesas fixas para ambos:
-              Casa: R$ 568,00
-              Taxa casa: R$ 82,00
-              Internet: R$ 89,00"
-            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "Casa", "amount": 568, "type": "fixo", "person": "Ambos" }, { "description": "Taxa casa", "amount": 82, "type": "fixo", "person": "Ambos" }, { "description": "Internet", "amount": 89, "type": "fixo", "person": "Ambos" } ] }
+            #### Editar e Excluir Metas:
+            - Usuário: "aumente a meta da Viagem para Disney para 15000"
+            - JSON: { "action": "updateGoal", "goalUpdate": { "identifier": { "name": "Viagem para Disney" }, "updates": { "targetAmount": 15000 } } }
+            - Usuário: "pode excluir a meta de comprar um celular novo"
+            - JSON: { "action": "deleteGoal", "goalIdentifier": { "name": "comprar um celular novo" } }
 
-            #### Atualizar Transação:
-            # Exemplo 3:
-            - Usuário: "mude a categoria do ifood para alimentação"
-            - JSON: { "action": "updateTransaction", "transactionUpdate": { "identifier": { "description": "ifood" }, "updates": { "category": "Alimentação" } } }
+            #### Editar e Excluir Orçamentos (Tetos):
+            - Usuário: "mude o teto de Lazer para R$ 500"
+            - JSON: { "action": "updateBudget", "budgetUpdate": { "identifier": { "category": "Lazer" }, "updates": { "amount": 500 } } }
+            - Usuário: "não quero mais ter um teto para Transporte"
+            - JSON: { "action": "deleteBudget", "budgetIdentifier": { "category": "Transporte" } }
+
+            #### Atuando como Assessora Financeira (Consultoria):
+            - Usuário: "como podemos economizar mais este mês?"
+            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos do último mês, vejo que a categoria 'Alimentação', especialmente com delivery, foi a mais alta. Uma boa estratégia seria definir um teto de gastos para essa categoria ou tentar cozinhar em casa durante a semana. Isso poderia economizar até R$ 300, ajudando a acelerar a meta 'Viagem para Disney'!" }
+
+            ### DADOS ATUAIS DO CASAL:
+            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 20))}
+            - Metas Atuais: ${JSON.stringify(goals)}
+            - Orçamentos Atuais: ${JSON.stringify(budgets)}
 
             ### MENSAGEM DO USUÁRIO PARA ANÁLISE:
             "${input}"`;
@@ -858,13 +906,93 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     }
                     break;
 
+                case 'addGoal':
+                    if (responseJson.goal?.name && responseJson.goal?.targetAmount) {
+                        const { name, targetAmount } = responseJson.goal;
+                        const { data, error } = await supabase.from('goals').insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }]).select();
+                        if (error) { aiResponseText = "Erro ao salvar a nova meta."; console.error(error); }
+                        else if (data) {
+                            setGoals(prev => [...prev, data[0]]);
+                            aiResponseText = `Ótimo! Nova meta criada: "${name}" com o objetivo de ${formatCurrency(targetAmount)}.`;
+                        }
+                    }
+                    break;
+                case 'updateGoal':
+                    if (responseJson.goalUpdate?.identifier?.name && responseJson.goalUpdate?.updates) {
+                        const { identifier, updates } = responseJson.goalUpdate;
+                        const goalToUpdate = goals.find(g => g.name.toLowerCase().includes(identifier.name.toLowerCase()));
+                        if (goalToUpdate) {
+                            const { data, error } = await supabase.from('goals').update(updates).eq('id', goalToUpdate.id).select();
+                            if (error) { aiResponseText = "Erro ao atualizar a meta."; console.error(error); }
+                            else if (data) {
+                                setGoals(prev => prev.map(g => g.id === goalToUpdate.id ? data[0] : g));
+                                aiResponseText = `Meta "${goalToUpdate.name}" atualizada com sucesso!`;
+                            }
+                        } else { aiResponseText = `Não encontrei a meta "${identifier.name}" para atualizar.`; }
+                    }
+                    break;
+                case 'deleteGoal':
+                    if (responseJson.goalIdentifier?.name) {
+                        const { name } = responseJson.goalIdentifier;
+                        const goalToDelete = goals.find(g => g.name.toLowerCase().includes(name.toLowerCase()));
+                        if (goalToDelete) {
+                            const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id);
+                            if (error) { aiResponseText = "Erro ao excluir a meta."; console.error(error); }
+                            else {
+                                setGoals(prev => prev.filter(g => g.id !== goalToDelete.id));
+                                aiResponseText = `Ok, a meta "${goalToDelete.name}" foi removida.`;
+                            }
+                        } else { aiResponseText = `Não encontrei a meta "${name}" para excluir.`; }
+                    }
+                    break;
+                
+                // --- NOVOS CASES PARA ORÇAMENTOS ---
+                case 'addBudget':
+                    if (responseJson.budget?.category && responseJson.budget?.amount) {
+                        const { category, amount } = responseJson.budget;
+                        const { data, error } = await supabase.from('budgets').insert([{ category, amount, user_id: session.user.id }]).select();
+                        if (error) { aiResponseText = "Erro ao salvar o novo teto de gastos."; console.error(error); }
+                        else if (data) {
+                            setBudgets(prev => [...prev, data[0]]);
+                            aiResponseText = `Teto de gastos para "${category}" definido em ${formatCurrency(amount)}.`;
+                        }
+                    }
+                    break;
+                case 'updateBudget':
+                    if (responseJson.budgetUpdate?.identifier?.category && responseJson.budgetUpdate?.updates) {
+                        const { identifier, updates } = responseJson.budgetUpdate;
+                        const budgetToUpdate = budgets.find(b => b.category === identifier.category);
+                        if (budgetToUpdate) {
+                            const { data, error } = await supabase.from('budgets').update(updates).eq('id', budgetToUpdate.id).select();
+                            if (error) { aiResponseText = "Erro ao atualizar o teto de gastos."; console.error(error); }
+                            else if (data) {
+                                setBudgets(prev => prev.map(b => b.id === budgetToUpdate.id ? data[0] : b));
+                                aiResponseText = `Teto de gastos da categoria "${budgetToUpdate.category}" atualizado!`;
+                            }
+                        } else { aiResponseText = `Não encontrei um teto para a categoria "${identifier.category}".`; }
+                    }
+                    break;
+                case 'deleteBudget':
+                     if (responseJson.budgetIdentifier?.category) {
+                        const { category } = responseJson.budgetIdentifier;
+                        const budgetToDelete = budgets.find(b => b.category === category);
+                        if (budgetToDelete) {
+                            const { error } = await supabase.from('budgets').delete().eq('id', budgetToDelete.id);
+                            if (error) { aiResponseText = "Erro ao excluir o teto de gastos."; console.error(error); }
+                            else {
+                                setBudgets(prev => prev.filter(b => b.id !== budgetToDelete.id));
+                                aiResponseText = `Ok, o teto de gastos para "${budgetToDelete.category}" foi removido.`;
+                            }
+                        } else { aiResponseText = `Não encontrei um teto para a categoria "${category}" para excluir.`; }
+                    }
+                    break;
+
                 case 'answerQuery':
                     if (responseJson.answer) {
                        aiResponseText = responseJson.answer;
                     }
                     break;
             }
-
             setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 2).toString(), sender: 'ai', text: aiResponseText }]);
 
         } catch (error) {
