@@ -729,19 +729,21 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                 }
             };
 
-        const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
+                    const prompt = `Contexto: Você é um assistente financeiro para um casal. A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.
             Histórico de transações recente: ${JSON.stringify(transactions.slice(0, 5))}.
 
             Tarefa: Sua principal função é analisar a mensagem do usuário e escolher a ação correta.
-            1.  ADICIONAR UMA: Se o usuário quer registrar APENAS UMA transação, use 'addTransaction'.
-            2.  ADICIONAR VÁRIAS: Se o usuário lista MÚLTIPLAS transações na mesma frase (usando "e", "além de", etc.), use 'addMultipleTransactions'.
-            3.  ATUALIZAR: Se o usuário quer CORRIGIR ou EDITAR uma transação, use 'updateTransaction'.
-            4.  EXCLUIR: Se o usuário quer REMOVER ou APAGAR uma transação, use 'deleteTransaction'.
-            5.  RESPONDER: Se for apenas uma pergunta, use 'answerQuery'.
+            - Se o usuário declarar propriedades comuns no início da frase (ex: "despesas fixas para ambos"), aplique essas propriedades a TODAS as transações que você extrair daquela mensagem.
+            - Se o usuário lista MÚLTIPLAS transações, use 'addMultipleTransactions'.
+            - Se o usuário menciona APENAS UMA transação, use 'addTransaction'.
+            - Para CORRIGIR ou EDITAR, use 'updateTransaction'.
+            - Para REMOVER ou APAGAR, use 'deleteTransaction'.
+            - Para perguntas, use 'answerQuery'.
 
             Exemplos de ADIÇÃO DE VÁRIAS ('addMultipleTransactions'):
-            - "adicione ifood 50 reais e uber 30 reais" -> { action: 'addMultipleTransactions', transactions: [ { description: 'ifood', amount: 50 }, { description: 'uber', amount: 30 } ] }
+            - "adicione ifood 50 reais e uber 30 reais" -> { action: 'addMultipleTransactions', transactions: [ { description: 'ifood', amount: 50, type: 'variável' }, { description: 'uber', amount: 30, type: 'variável' } ] }
             - "lancei 25 de farmácia para a Jussara e 100 de mercado para ambos" -> { action: 'addMultipleTransactions', transactions: [ { description: 'farmácia', amount: 25, person: 'Jussara' }, { description: 'mercado', amount: 100, person: 'Ambos' } ] }
+            - "quero adicionar essas despesas fixas para ambos: Casa: R$ 568,00 Taxa casa: R$ 82,00 Internet: R$ 89,00" -> { action: 'addMultipleTransactions', transactions: [ { description: 'Casa', amount: 568, type: 'fixo', person: 'Ambos' }, { description: 'Taxa casa', amount: 82, type: 'fixo', person: 'Ambos' }, { description: 'Internet', amount: 89, type: 'fixo', person: 'Ambos' } ] }
 
             Exemplos de ATUALIZAÇÃO ('updateTransaction'):
             - "edite o ifood para a categoria alimentação" -> { action: 'updateTransaction', transactionUpdate: { identifier: { description: 'ifood' }, updates: { category: 'Alimentação' } } }
@@ -1464,17 +1466,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     chatInputForm: {
         display: 'flex',
         padding: '0.5rem 1rem',
-        borderTop: '1px solid var(--border-color)',
         alignItems: 'center',
         gap: '0.5rem',
-        backgroundColor: 'var(--card-background)',
+        backgroundColor: 'transparent', // Fundo transparente
+        borderTop: 'none',             // Sem borda superior
     },
     chatInput: {
         flex: 1,
-        border: 'none',
-        padding: '0.75rem',
+        border: '1px solid var(--border-color)', // Adicionada uma borda sutil
+        padding: '0.75rem 1rem',                 // Ajuste no padding
         borderRadius: '20px',
-        backgroundColor: 'var(--background-color)',
+        backgroundColor: 'var(--card-background)', // Fundo mais claro (branco no tema light)
         color: 'var(--text-color)',
     },
     chatSendButton: {
