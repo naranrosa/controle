@@ -99,6 +99,7 @@ const Icons = {
     sun: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
     moon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
     pin: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>,
+    layers: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>,
     send: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
     chevronLeft: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>,
     chevronRight: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>,
@@ -316,6 +317,108 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
                     </div>
                 )) : <p style={styles.noDataText}>Nenhum lançamento neste mês.</p>}
             </div>
+        </div>
+    );
+};
+
+const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>, session: Session, currentUser: User }) => {
+    const [inputText, setInputText] = useState('');
+    const [parsedTransactions, setParsedTransactions] = useState<Omit<Transaction, 'id' | 'user_id' | 'date'>[]>([]);
+
+    const handleParseText = () => {
+        const lines = inputText.split('\n').filter(line => line.trim() !== '');
+        const regex = /(.*?):\s*R?\$\s*([\d,.]+)/;
+        
+        const newParsed = lines.map(line => {
+            const match = line.match(regex);
+            if (match) {
+                const description = match[1].trim();
+                const amount = parseFloat(match[2].replace('.', '').replace(',', '.'));
+                return {
+                    description,
+                    amount,
+                    category: 'Outros', // Valor padrão
+                    person: 'Ambos',   // Valor padrão
+                    type: 'variável', // Valor padrão
+                    flow: 'expense' as 'expense',
+                };
+            }
+            return null;
+        }).filter(item => item !== null) as Omit<Transaction, 'id' | 'user_id' | 'date'>[];
+        
+        setParsedTransactions(newParsed);
+    };
+
+    const handleUpdateField = (index: number, field: keyof Omit<Transaction, 'id' | 'user_id' | 'date' | 'description' | 'amount' | 'flow'>, value: any) => {
+        const updated = [...parsedTransactions];
+        updated[index] = { ...updated[index], [field]: value };
+        setParsedTransactions(updated);
+    };
+
+    const handleSubmitAll = async () => {
+        if (parsedTransactions.length === 0) return;
+
+        const transactionsToInsert = parsedTransactions.map(t => ({
+            ...t,
+            date: new Date().toISOString().split('T')[0],
+            user_id: session.user.id,
+        }));
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .insert(transactionsToInsert)
+            .select();
+
+        if (error) {
+            console.error('Error adding multiple transactions:', error);
+            alert('Erro ao salvar as despesas.');
+        } else if (data) {
+            alert(`${data.length} despesas salvas com sucesso!`);
+            setTransactions(prev => [...data, ...prev]);
+            setInputText('');
+            setParsedTransactions([]);
+        }
+    };
+
+    return (
+        <div style={styles.page}>
+            <h2 style={styles.pageTitle}>Lançar Múltiplas Despesas</h2>
+            <div style={styles.card}>
+                <p style={styles.cardLabel}>Cole suas despesas no formato "Descrição: R$ Valor", uma por linha.</p>
+                <textarea
+                    style={{...styles.input, height: '120px', resize: 'vertical'}}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={"Exemplo:\nSupermercado: R$ 350,50\nPadaria: R$ 25,00"}
+                />
+                <button onClick={handleParseText} style={{...styles.button, marginTop: '1rem'}}>Analisar Despesas</button>
+            </div>
+
+            {parsedTransactions.length > 0 && (
+                <>
+                    <h3 style={styles.subPageTitle}>Complete as informações</h3>
+                    {parsedTransactions.map((t, index) => (
+                        <div key={index} style={{...styles.card, borderLeft: '4px solid var(--primary-color)'}}>
+                            <p style={{margin: 0, fontWeight: 600, fontSize: '1.1rem'}}>{t.description} - {formatCurrency(t.amount)}</p>
+                            <div style={{...styles.grid, marginTop: '1rem'}}>
+                                <select style={styles.input} value={t.category} onChange={(e) => handleUpdateField(index, 'category', e.target.value)}>
+                                    {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                </select>
+                                <select style={styles.input} value={t.person} onChange={(e) => handleUpdateField(index, 'person', e.target.value)}>
+                                    <option value="Natan">Natan</option>
+                                    <option value="Jussara">Jussara</option>
+                                    <option value="Ambos">Ambos</option>
+                                </select>
+                                <select style={styles.input} value={t.type} onChange={(e) => handleUpdateField(index, 'type', e.target.value)}>
+                                    <option value="variável">Variável</option>
+                                    <option value="fixo">Fixo</option>
+                                </select>
+                            </div>
+                        </div>
+                    ))}
+                    <button onClick={handleSubmitAll} style={styles.button}>Salvar Todas as {parsedTransactions.length} Despesas</button>
+                </>
+            )}
         </div>
     );
 };
@@ -660,36 +763,21 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-            const responseSchema = {
+                        const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
                         type: Type.STRING,
                         enum: [
-                            "addTransaction", "addMultipleTransactions",
+                            // Ações de adicionar transações foram removidas
                             "updateTransaction", "deleteTransaction",
-                            "addGoal", "updateGoal", "deleteGoal",
+                            "addGoal", "updateGoal", "deleteGoal", 
                             "addBudget", "updateBudget", "deleteBudget",
                             "answerQuery"
                         ],
                         description: "A ação a ser tomada com base na análise da mensagem."
                     },
-                    // --- Seção de Transações ---
-                    transaction: {
-                        type: Type.OBJECT,
-                        properties: {
-                            flow: { type: Type.STRING, enum: ["income", "expense"] }, description: { type: Type.STRING }, amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, type: { type: Type.STRING, enum: ["fixo", "variável"] },
-                        },
-                    },
-                    transactions: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                flow: { type: Type.STRING, enum: ["income", "expense"] }, description: { type: Type.STRING }, amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, type: { type: Type.STRING, enum: ["fixo", "variável"] },
-                            },
-                        }
-                    },
+                    // --- Seção de Gerenciamento de Transações ---
                     transactionUpdate: {
                         type: Type.OBJECT,
                         properties: {
@@ -725,41 +813,33 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
                 }
             };
-
-                        const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a gerenciar suas finanças, oferecendo tanto ferramentas de registro quanto insights valiosos.
+                        const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a GERENCIAR suas finanças e fornecer CONSULTORIA. Você NÃO é responsável por adicionar novas transações.
 
             ### SEU KIT DE FERRAMENTAS (AÇÕES):
-            - **Transações:** 'addMultipleTransactions', 'updateTransaction', 'deleteTransaction'.
-            - **Metas:** 'addGoal', 'updateGoal', 'deleteGoal'.
-            - **Orçamentos/Tetos:** 'addBudget', 'updateBudget', 'deleteBudget'.
-            - **Consultoria:** 'answerQuery' (para todas as perguntas e análises).
+            - **Gerenciar Transações:** 'updateTransaction', 'deleteTransaction'. (APENAS editar e excluir).
+            - **Gerenciar Metas:** 'addGoal', 'updateGoal', 'deleteGoal'.
+            - **Gerenciar Orçamentos/Tetos:** 'addBudget', 'updateBudget', 'deleteBudget'.
+            - **Consultoria Financeira:** 'answerQuery' (para todas as perguntas e análises).
 
             ### REGRAS DE EXECUÇÃO:
-            1.  **Análise de Intenção:** Primeiro, entenda o que o usuário quer: registrar, editar, excluir ou perguntar/analisar?
-            2.  **Contexto e Múltiplos Itens:** Se o usuário der um contexto geral (ex: "despesas fixas para ambos") ou listar vários itens, use as ações em massa ('addMultipleTransactions').
-            3.  **Atuar como Assessora:** Ao usar 'answerQuery', não seja um robô. Use os dados fornecidos (histórico, metas) para dar respostas inteligentes. Analise os números e dê conselhos práticos.
+            1.  **NUNCA ADICIONE TRANSAÇÕES:** Se o usuário pedir para adicionar uma despesa, instrua-o a usar a aba "Lançar" ou "Múltiplas". Ex: "Para adicionar novas despesas, por favor, use a funcionalidade 'Lançar' ou 'Múltiplas' no aplicativo. Aqui no chat, posso te ajudar a editar ou excluir algo já lançado!".
+            2.  **Atuar como Assessora:** Ao usar 'answerQuery', use os dados fornecidos para dar respostas inteligentes. Analise os números e dê conselhos práticos.
 
             ### EXEMPLOS PRÁTICOS:
 
-            #### Múltiplas Transações:
-            - Usuário: "quero adicionar essas despesas fixas para ambos: Casa: R$ 568,00 e Internet: R$ 89,00"
-            - JSON: { "action": "addMultipleTransactions", "transactions": [ { "description": "Casa", "amount": 568, "type": "fixo", "person": "Ambos" }, { "description": "Internet", "amount": 89, "type": "fixo", "person": "Ambos" } ] }
+            #### Gerenciar Transações Existentes:
+            - Usuário: "a despesa supermercado foi R$ 450 na verdade"
+            - JSON: { "action": "updateTransaction", "transactionUpdate": { "identifier": { "description": "supermercado" }, "updates": { "amount": 450 } } }
+            - Usuário: "exclua o gasto com cinema"
+            - JSON: { "action": "deleteTransaction", "transactionIdentifier": { "description": "cinema" } }
 
-            #### Editar e Excluir Metas:
-            - Usuário: "aumente a meta da Viagem para Disney para 15000"
-            - JSON: { "action": "updateGoal", "goalUpdate": { "identifier": { "name": "Viagem para Disney" }, "updates": { "targetAmount": 15000 } } }
-            - Usuário: "pode excluir a meta de comprar um celular novo"
-            - JSON: { "action": "deleteGoal", "goalIdentifier": { "name": "comprar um celular novo" } }
-
-            #### Editar e Excluir Orçamentos (Tetos):
-            - Usuário: "mude o teto de Lazer para R$ 500"
-            - JSON: { "action": "updateBudget", "budgetUpdate": { "identifier": { "category": "Lazer" }, "updates": { "amount": 500 } } }
-            - Usuário: "não quero mais ter um teto para Transporte"
-            - JSON: { "action": "deleteBudget", "budgetIdentifier": { "category": "Transporte" } }
-
+            #### Gerenciar Metas e Orçamentos:
+            - Usuário: "crie uma meta de R$ 5000 para a reforma da casa"
+            - JSON: { "action": "addGoal", "goal": { "name": "Reforma da casa", "targetAmount": 5000 } }
+            
             #### Atuando como Assessora Financeira (Consultoria):
-            - Usuário: "como podemos economizar mais este mês?"
-            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos do último mês, vejo que a categoria 'Alimentação', especialmente com delivery, foi a mais alta. Uma boa estratégia seria definir um teto de gastos para essa categoria ou tentar cozinhar em casa durante a semana. Isso poderia economizar até R$ 300, ajudando a acelerar a meta 'Viagem para Disney'!" }
+            - Usuário: "estamos gastando muito com lazer?"
+            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos, a categoria 'Lazer' representa 20% das suas despesas totais, o que é um pouco acima da média. Podemos pensar em criar um teto de gastos para essa categoria para ajudar a controlar melhor." }
 
             ### DADOS ATUAIS DO CASAL:
             - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 20))}
@@ -778,35 +858,9 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
-                        switch (responseJson.action) {
-                case 'addTransaction':
-                    if (responseJson.transaction?.amount && responseJson.transaction?.description) {
-                        const t = responseJson.transaction;
-                        const newTransactionData: Omit<Transaction, 'id'> = {
-                            description: t.description, amount: t.amount, flow: t.flow || 'expense', category: t.category || 'Outros', person: t.person || currentUser, type: t.type || 'variável', date: new Date().toISOString().split('T')[0], user_id: session.user.id
-                        };
-                        const { data, error } = await supabase.from('transactions').insert([newTransactionData]).select();
-                        if (error) { aiResponseText = "Erro ao salvar a transação."; console.error(error); }
-                        else if (data) {
-                            setTransactions(prev => [data[0], ...prev]);
-                            aiResponseText = `${t.flow === 'income' ? 'Receita' : 'Despesa'} de ${formatCurrency(t.amount)} adicionada: ${t.description}.`;
-                        }
-                    }
-                    break;
-                case 'addMultipleTransactions':
-                    if (responseJson.transactions && Array.isArray(responseJson.transactions) && responseJson.transactions.length > 0) {
-                        const newTransactionsData = responseJson.transactions.map((t: any) => ({
-                            description: t.description, amount: t.amount, flow: t.flow || 'expense', category: t.category || 'Outros', person: t.person || currentUser, type: t.type || 'variável', date: new Date().toISOString().split('T')[0], user_id: session.user.id
-                        }));
-                        const { data, error } = await supabase.from('transactions').insert(newTransactionsData).select();
-                        if (error) { aiResponseText = "Ocorreu um erro ao salvar as transações."; console.error(error); }
-                        else if (data) {
-                            setTransactions(prev => [...data, ...prev]);
-                            const summary = data.map(t => `${t.description} (${formatCurrency(t.amount)})`).join(' e ');
-                            aiResponseText = `Ok, adicionei ${data.length} novas transações: ${summary}.`;
-                        }
-                    }
-                    break;
+                                    switch (responseJson.action) {
+                // Os cases 'addTransaction' e 'addMultipleTransactions' foram removidos daqui.
+
                 case 'updateTransaction':
                     if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
                         const { identifier, updates } = responseJson.transactionUpdate;
@@ -1065,6 +1119,8 @@ const App = () => {
         return <Dashboard transactions={filteredTransactions} goals={goals} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'transactions':
         return <Transactions setTransactions={setTransactions} currentUser={currentUser} allSortedTransactions={allSortedTransactions} session={session} />;
+      case 'multiple':
+        return <MultipleTransactions setTransactions={setTransactions} session={session} currentUser={currentUser} />;
       case 'reports':
         return <Reports transactions={filteredTransactions} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
       case 'goals':
@@ -1104,6 +1160,7 @@ const App = () => {
         <nav style={styles.nav} className="app-nav">
             <NavItem screen="dashboard" label="Início" icon={Icons.home} />
             <NavItem screen="transactions" label="Lançar" icon={Icons.plus} />
+            <NavItem screen="multiple" label="Múltiplas" icon={Icons.layers} />
             <NavItem screen="reports" label="Relatórios" icon={Icons.chart} />
             <NavItem screen="budgets" label="Orçamento" icon={Icons.wallet} />
             <NavItem screen="goals" label="Metas" icon={Icons.target} />
