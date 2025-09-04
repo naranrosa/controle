@@ -220,16 +220,17 @@ const Dashboard = ({ transactions, goals, currentDate, setCurrentDate }: { trans
     const { natanExpenses, jussaraExpenses } = useMemo(() => {
         let natanTotal = 0;
         let jussaraTotal = 0;
-        transactions.filter(t => t.flow === 'expense').forEach(t => {
-            if (t.person === 'Natan') {
-                natanTotal += t.amount;
-            } else if (t.person === 'Jussara') {
-                jussaraTotal += t.amount;
-            } else if (t.person === 'Ambos') {
-                natanTotal += t.amount / 2;
-                jussaraTotal += t.amount / 2;
-            }
-        });
+        transactions
+            .filter(t => t.flow === 'expense')
+            .forEach(t => {
+                if (t.person === 'Natan') {
+                    natanTotal += t.amount;
+                } else if (t.person === 'Jussara') {
+                    jussaraTotal += t.amount;
+                }
+                // A condição para 'Ambos' foi removida.
+                // Agora, apenas despesas explicitamente de Natan ou Jussara serão somadas aqui.
+            });
         return { natanExpenses: natanTotal, jussaraExpenses: jussaraTotal };
     }, [transactions]);
 
@@ -328,7 +329,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
     const handleParseText = () => {
         const lines = inputText.split('\n').filter(line => line.trim() !== '');
         const regex = /(.*?):\s*R?\$\s*([\d,.]+)/;
-        
+
         const newParsed = lines.map(line => {
             const match = line.match(regex);
             if (match) {
@@ -345,7 +346,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
             }
             return null;
         }).filter(item => item !== null) as Omit<Transaction, 'id' | 'user_id' | 'date'>[];
-        
+
         setParsedTransactions(newParsed);
     };
 
@@ -683,9 +684,9 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
                 console.error("Error adding budget:", error);
             } else if (data) {
                 setBudgets([...budgets, data[0]]);
-            }
+                e.currentTarget.reset();
         }
-        e.currentTarget.reset();
+
     };
 
     return (
@@ -743,7 +744,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
     session: Session
 }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([
-        { id: '1', sender: 'ai', text: `Olá! Sou seu assistente financeiro. Como posso ajudar? Você pode registrar transações, gerenciar metas ou definir tetos de gastos.` }
+        { id: '1', sender: 'ai', text: `Olá! Sou a Fin, sua assessora financeira. Como posso ajudar com seu planejamento hoje? Posso analisar seus gastos, dar dicas sobre suas metas ou responder a perguntas sobre o mercado financeiro.` }
     ]);
     const [input, setInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -763,90 +764,53 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
         setInput('');
 
         try {
-                        const responseSchema = {
+            // Schema focado apenas em responder perguntas
+            const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     action: {
                         type: Type.STRING,
-                        enum: [
-                            // Ações de adicionar transações foram removidas
-                            "updateTransaction", "deleteTransaction",
-                            "addGoal", "updateGoal", "deleteGoal", 
-                            "addBudget", "updateBudget", "deleteBudget",
-                            "answerQuery"
-                        ],
-                        description: "A ação a ser tomada com base na análise da mensagem."
+                        enum: ["answerQuery"],
+                        description: "A única ação disponível é responder à pergunta do usuário."
                     },
-                    // --- Seção de Gerenciamento de Transações ---
-                    transactionUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, description: { type: Type.STRING }, } }
-                        }
-                    },
-                    transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-
-                    // --- Seção de Metas (Goals) ---
-                    goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
-                    goalUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } },
-                            updates: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } }
-                        }
-                    },
-                    goalIdentifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser excluída." } } },
-
-                    // --- Seção de Orçamentos (Budgets) ---
-                    budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
-                    budgetUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } },
-                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER } } }
-                        }
-                    },
-                    budgetIdentifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser excluído." } } },
-
-                    // --- Seção de Respostas (Consultoria) ---
-                    answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
+                    answer: {
+                        type: Type.STRING,
+                        description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira especialista, atenta às notícias e ao mercado."
+                    }
                 }
             };
-                        const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a GERENCIAR suas finanças e fornecer CONSULTORIA. Você NÃO é responsável por adicionar novas transações.
 
-            ### SEU KIT DE FERRAMENTAS (AÇÕES):
-            - **Gerenciar Transações:** 'updateTransaction', 'deleteTransaction'. (APENAS editar e excluir).
-            - **Gerenciar Metas:** 'addGoal', 'updateGoal', 'deleteGoal'.
-            - **Gerenciar Orçamentos/Tetos:** 'addBudget', 'updateBudget', 'deleteBudget'.
-            - **Consultoria Financeira:** 'answerQuery' (para todas as perguntas e análises).
+            const conversationHistory = messages.slice(-4).map(msg => `${msg.sender === 'user' ? 'Usuário' : 'Você'}: ${msg.text}`).join('\n');
+
+            const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente, clara e sempre atualizada com o mercado financeiro. Sua ÚNICA função é fornecer CONSULTORIA e INSIGHTS.
+
+            ### HISTÓRICO DA CONVERSA RECENTE:
+            ${conversationHistory}
+
+            ### SUA ÚNICA FERRAMENTA:
+            - **Consultoria/Conversa:** 'answerQuery'.
 
             ### REGRAS DE EXECUÇÃO:
-            1.  **NUNCA ADICIONE TRANSAÇÕES:** Se o usuário pedir para adicionar uma despesa, instrua-o a usar a aba "Lançar" ou "Múltiplas". Ex: "Para adicionar novas despesas, por favor, use a funcionalidade 'Lançar' ou 'Múltiplas' no aplicativo. Aqui no chat, posso te ajudar a editar ou excluir algo já lançado!".
-            2.  **Atuar como Assessora:** Ao usar 'answerQuery', use os dados fornecidos para dar respostas inteligentes. Analise os números e dê conselhos práticos.
+            1.  **SEJA UMA ESPECIALISTA:** Aja como uma profissional qualificada. Se não souber a resposta, admita, mas tente guiar o usuário para onde ele possa encontrar a informação.
+            2.  **FOCO EM ANÁLISE:** Use os dados financeiros fornecidos para embasar suas respostas. Analise tendências, identifique oportunidades de economia e elogie bons hábitos.
+            3.  **NUNCA EXECUTE AÇÕES:** Você NÃO PODE adicionar, editar ou excluir transações, metas ou orçamentos. Se o usuário pedir para fazer uma dessas ações, instrua-o a navegar para a aba correspondente (Lançar, Metas, Orçamento) para que ele mesmo realize a ação.
+            4.  **MANTENHA O CONTEXTO:** Use o histórico da conversa para entender perguntas de acompanhamento.
 
             ### EXEMPLOS PRÁTICOS:
-
-            #### Gerenciar Transações Existentes:
-            - Usuário: "a despesa supermercado foi R$ 450 na verdade"
-            - JSON: { "action": "updateTransaction", "transactionUpdate": { "identifier": { "description": "supermercado" }, "updates": { "amount": 450 } } }
-            - Usuário: "exclua o gasto com cinema"
-            - JSON: { "action": "deleteTransaction", "transactionIdentifier": { "description": "cinema" } }
-
-            #### Gerenciar Metas e Orçamentos:
-            - Usuário: "crie uma meta de R$ 5000 para a reforma da casa"
-            - JSON: { "action": "addGoal", "goal": { "name": "Reforma da casa", "targetAmount": 5000 } }
-            
-            #### Atuando como Assessora Financeira (Consultoria):
             - Usuário: "estamos gastando muito com lazer?"
-            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos, a categoria 'Lazer' representa 20% das suas despesas totais, o que é um pouco acima da média. Podemos pensar em criar um teto de gastos para essa categoria para ajudar a controlar melhor." }
+            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos, a categoria 'Lazer' representa 20% das suas despesas totais, que é um valor considerável. Para ter um controle melhor, vocês poderiam definir um teto de gastos para essa categoria na aba 'Orçamento'." }
+            - Usuário: "adicione uma despesa de R$50 de alimentação"
+            - JSON: { "action": "answerQuery", "answer": "Claro! Para registrar essa despesa, por favor, vá até a aba 'Lançar' e insira os detalhes por lá. Manter os registros em dia é fundamental!" }
+            - Usuário: "qual o melhor investimento para nossa reserva de emergência?"
+            - JSON: { "action": "answerQuery", "answer": "Excelente pergunta! Para a reserva de emergência, o ideal são investimentos com alta liquidez e baixo risco. Opções como o Tesouro Selic ou CDBs que pagam 100% do CDI são ótimas escolhas. Eles rendem mais que a poupança e o resgate é rápido." }
 
-            ### DADOS ATUAIS DO CASAL:
-            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 20))}
+
+            ### DADOS FINANCEIROS ATUAIS DO CASAL:
+            - Histórico de Transações Recentes: ${JSON.stringify(transactions.slice(0, 10))}
             - Metas Atuais: ${JSON.stringify(goals)}
             - Orçamentos Atuais: ${JSON.stringify(budgets)}
 
-            ### MENSAGEM DO USUÁRIO PARA ANÁLISE:
+            ### MENSAGEM ATUAL DO USUÁRIO PARA ANÁLISE:
             "${input}"`;
 
             const result = await ai.models.generateContent({
@@ -858,122 +822,10 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
-                                    switch (responseJson.action) {
-                // Os cases 'addTransaction' e 'addMultipleTransactions' foram removidos daqui.
-
-                case 'updateTransaction':
-                    if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
-                        const { identifier, updates } = responseJson.transactionUpdate;
-                        const transactionToUpdate = transactions.find(t => t.description.toLowerCase().includes(identifier.description.toLowerCase()));
-                        if (transactionToUpdate) {
-                            const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).select();
-                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); }
-                            else if (data) {
-                                setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
-                                const changedFields = Object.keys(updates).join(', ');
-                                aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}". O(s) campo(s) '${changedFields}' foi/foram alterado(s).`;
-                            }
-                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}' para atualizar.`; }
-                    }
-                    break;
-                case 'deleteTransaction':
-                    if (responseJson.transactionIdentifier?.description) {
-                        const { description } = responseJson.transactionIdentifier;
-                        const transactionToDelete = transactions.find(t => t.description.toLowerCase().includes(description.toLowerCase()));
-                        if (transactionToDelete) {
-                            const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
-                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); }
-                            else {
-                                setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
-                                aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída com sucesso.`;
-                            }
-                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}' para excluir.`; }
-                    }
-                    break;
-                case 'addGoal':
-                    if (responseJson.goal?.name && responseJson.goal?.targetAmount) {
-                        const { name, targetAmount } = responseJson.goal;
-                        const { data, error } = await supabase.from('goals').insert([{ name, targetAmount, currentAmount: 0, user_id: session.user.id }]).select();
-                        if (error) { aiResponseText = "Erro ao salvar a nova meta."; console.error(error); }
-                        else if (data) {
-                            setGoals(prev => [...prev, data[0]]);
-                            aiResponseText = `Ótimo! Nova meta criada: "${name}" com o objetivo de ${formatCurrency(targetAmount)}.`;
-                        }
-                    }
-                    break;
-                case 'updateGoal':
-                    if (responseJson.goalUpdate?.identifier?.name && responseJson.goalUpdate?.updates) {
-                        const { identifier, updates } = responseJson.goalUpdate;
-                        const goalToUpdate = goals.find(g => g.name.toLowerCase().includes(identifier.name.toLowerCase()));
-                        if (goalToUpdate) {
-                            const { data, error } = await supabase.from('goals').update(updates).eq('id', goalToUpdate.id).select();
-                            if (error) { aiResponseText = "Erro ao atualizar a meta."; console.error(error); }
-                            else if (data) {
-                                setGoals(prev => prev.map(g => g.id === goalToUpdate.id ? data[0] : g));
-                                aiResponseText = `Meta "${goalToUpdate.name}" atualizada com sucesso!`;
-                            }
-                        } else { aiResponseText = `Não encontrei a meta "${identifier.name}" para atualizar.`; }
-                    }
-                    break;
-                case 'deleteGoal':
-                    if (responseJson.goalIdentifier?.name) {
-                        const { name } = responseJson.goalIdentifier;
-                        const goalToDelete = goals.find(g => g.name.toLowerCase().includes(name.toLowerCase()));
-                        if (goalToDelete) {
-                            const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id);
-                            if (error) { aiResponseText = "Erro ao excluir a meta."; console.error(error); }
-                            else {
-                                setGoals(prev => prev.filter(g => g.id !== goalToDelete.id));
-                                aiResponseText = `Ok, a meta "${goalToDelete.name}" foi removida.`;
-                            }
-                        } else { aiResponseText = `Não encontrei a meta "${name}" para excluir.`; }
-                    }
-                    break;
-                case 'addBudget':
-                    if (responseJson.budget?.category && responseJson.budget?.amount) {
-                        const { category, amount } = responseJson.budget;
-                        const { data, error } = await supabase.from('budgets').insert([{ category, amount, user_id: session.user.id }]).select();
-                        if (error) { aiResponseText = "Erro ao salvar o novo teto de gastos."; console.error(error); }
-                        else if (data) {
-                            setBudgets(prev => [...prev, data[0]]);
-                            aiResponseText = `Teto de gastos para "${category}" definido em ${formatCurrency(amount)}.`;
-                        }
-                    }
-                    break;
-                case 'updateBudget':
-                    if (responseJson.budgetUpdate?.identifier?.category && responseJson.budgetUpdate?.updates) {
-                        const { identifier, updates } = responseJson.budgetUpdate;
-                        const budgetToUpdate = budgets.find(b => b.category === identifier.category);
-                        if (budgetToUpdate) {
-                            const { data, error } = await supabase.from('budgets').update(updates).eq('id', budgetToUpdate.id).select();
-                            if (error) { aiResponseText = "Erro ao atualizar o teto de gastos."; console.error(error); }
-                            else if (data) {
-                                setBudgets(prev => prev.map(b => b.id === budgetToUpdate.id ? data[0] : b));
-                                aiResponseText = `Teto de gastos da categoria "${budgetToUpdate.category}" atualizado!`;
-                            }
-                        } else { aiResponseText = `Não encontrei um teto para a categoria "${identifier.category}".`; }
-                    }
-                    break;
-                case 'deleteBudget':
-                     if (responseJson.budgetIdentifier?.category) {
-                        const { category } = responseJson.budgetIdentifier;
-                        const budgetToDelete = budgets.find(b => b.category === category);
-                        if (budgetToDelete) {
-                            const { error } = await supabase.from('budgets').delete().eq('id', budgetToDelete.id);
-                            if (error) { aiResponseText = "Erro ao excluir o teto de gastos."; console.error(error); }
-                            else {
-                                setBudgets(prev => prev.filter(b => b.id !== budgetToDelete.id));
-                                aiResponseText = `Ok, o teto de gastos para "${budgetToDelete.category}" foi removido.`;
-                            }
-                        } else { aiResponseText = `Não encontrei um teto para a categoria "${category}" para excluir.`; }
-                    }
-                    break;
-                case 'answerQuery':
-                    if (responseJson.answer) {
-                       aiResponseText = responseJson.answer;
-                    }
-                    break;
+            if (responseJson.action === 'answerQuery' && responseJson.answer) {
+                aiResponseText = responseJson.answer;
             }
+
             setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 2).toString(), sender: 'ai', text: aiResponseText }]);
 
         } catch (error) {
@@ -1008,7 +860,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     style={styles.chatInput}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Digite sua mensagem..."
+                    placeholder="Pergunte para a Fin..."
                     disabled={!ai}
                 />
                 <button type="submit" style={styles.chatSendButton} disabled={!ai || !input.trim()}>{Icons.send}</button>
