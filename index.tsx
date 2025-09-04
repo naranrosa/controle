@@ -652,9 +652,20 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
             }, {});
     }, [transactions]);
 
+    const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budget[], setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>, transactions: Transaction[], session: Session }) => {
+    const monthlySpending = useMemo(() => {
+        return transactions
+            .filter(t => t.flow === 'expense')
+            .reduce((acc: Record<string, number>, t) => {
+                acc[t.category] = (acc[t.category] || 0) + t.amount;
+                return acc;
+            }, {});
+    }, [transactions]);
+
     const addBudget = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
+        const form = e.currentTarget; // Guarda a referência do formulário
+        const formData = new FormData(form);
         const category = formData.get('category') as string;
         const amount = parseFloat(formData.get('amount') as string);
 
@@ -670,8 +681,10 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
 
             if (error) {
                 console.error("Error updating budget:", error);
+                alert("Erro ao atualizar o teto de gastos.");
             } else if (data) {
                 setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
+                form.reset(); // Limpa o formulário no sucesso
             }
         } else {
             // Insert
@@ -682,11 +695,12 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
 
             if (error) {
                 console.error("Error adding budget:", error);
+                alert("Erro ao definir o teto de gastos.");
             } else if (data) {
                 setBudgets([...budgets, data[0]]);
-                e.currentTarget.reset();
+                form.reset(); // Limpa o formulário no sucesso
             }
-        }
+        } // <-- A CHAVE FALTANTE FOI ADICIONADA AQUI
     };
 
     return (
