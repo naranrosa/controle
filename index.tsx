@@ -17,19 +17,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- TYPES AND INTERFACES ---
 interface Transaction {
-  id: string; // UUID from Supabase
-  person: string; // Agora é uma string dinâmica (ex: 'Natan', 'Jussara')
+  id: string;
+  person: string; // Dinâmico, ex: 'Natan', 'Jussara', 'Ambos'
   category: string;
   type: 'fixo' | 'variável';
   flow: 'income' | 'expense';
   amount: number;
   date: string; // YYYY-MM-DD
   description: string;
-  family_id?: string; // Foreign key to families
+  family_id?: string;
 }
 
 interface Goal {
-  id: string; // UUID from Supabase
+  id: string;
   name: string;
   targetAmount: number;
   currentAmount: number;
@@ -37,7 +37,7 @@ interface Goal {
 }
 
 interface Budget {
-    id: string; // UUID from Supabase
+    id: string;
     category: string;
     amount: number;
     family_id?: string;
@@ -50,9 +50,8 @@ interface ChatMessage {
     isLoading?: boolean;
 }
 
-// Interface para os membros da família
 interface FamilyMember {
-  id: string; // user_id (uuid from auth.users)
+  id: string; // user id (uuid)
   display_name: string;
 }
 
@@ -75,7 +74,7 @@ const formatCurrency = (value: number) => {
 const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-        .toLocaleDateDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        .toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 const formatMonthYear = (date: Date) => {
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -130,6 +129,9 @@ const MonthNavigator = ({ currentDate, setCurrentDate }: { currentDate: Date, se
 // --- SCREEN COMPONENTS ---
 
 const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => void }) => {
+    // Nota: Para o fluxo de cadastro, você precisará adicionar campos de metadados
+    // para 'display_name' para que o trigger do banco de dados funcione corretamente.
+    // A Auth UI padrão não suporta isso nativamente, exigindo um formulário customizado.
     return (
         <div style={styles.loginContainer}>
              <button onClick={toggleTheme} style={styles.loginThemeToggleButton}>
@@ -144,10 +146,16 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
                         appearance={{ theme: ThemeSupa }}
                         theme={theme === 'dark' ? 'dark' : 'default'}
                         view="sign_in"
-                        showLinks={false}
+                        showLinks={true}
                         providers={[]}
                         localization={{
                             variables: {
+                                sign_up: {
+                                    email_label: 'Seu email',
+                                    password_label: 'Crie uma senha',
+                                    button_label: 'Cadastrar',
+                                    // Adicionar campo de nome exigiria customização
+                                },
                                 sign_in: {
                                     email_label: 'Seu email',
                                     password_label: 'Sua senha',
@@ -214,33 +222,27 @@ const Dashboard = ({ transactions, goals, familyMembers, currentDate, setCurrent
         return { category: topCategory[0], amount: topCategory[1] };
     }, [transactions]);
 
-    const recentTransactions = useMemo(() => transactions.slice(0, 3), [transactions]);
+    const recentTransactions = useMemo(() => transactions.slice(0, 5), [transactions]);
 
     const individualExpenses = useMemo(() => {
-        const member1 = familyMembers[0];
-        const member2 = familyMembers[1];
-
-        const expenses = {
-            [member1?.display_name || 'Pessoa 1']: 0,
-            [member2?.display_name || 'Pessoa 2']: 0,
-        };
+        const expenses: Record<string, number> = {};
+        familyMembers.forEach(member => {
+            expenses[member.display_name] = 0;
+        });
 
         transactions
             .filter(t => t.flow === 'expense')
             .forEach(t => {
-                if (t.person === member1?.display_name) {
-                    expenses[member1.display_name] += t.amount;
-                } else if (t.person === member2?.display_name) {
-                    expenses[member2.display_name] += t.amount;
+                if (expenses.hasOwnProperty(t.person)) {
+                    expenses[t.person] += t.amount;
                 }
             });
         return expenses;
     }, [transactions, familyMembers]);
 
-    const member1Name = familyMembers[0]?.display_name || 'Pessoa 1';
-    const member2Name = familyMembers[1]?.display_name || 'Pessoa 2';
-    const member1Expenses = individualExpenses[member1Name];
-    const member2Expenses = individualExpenses[member2Name];
+    // Lógica para determinar quem gastou mais
+    const spendingEntries = Object.entries(individualExpenses);
+    const topSpender = spendingEntries.length > 1 ? spendingEntries.reduce((a, b) => a[1] > b[1] ? a : b)[0] : null;
 
     return (
         <div style={styles.page}>
@@ -266,32 +268,21 @@ const Dashboard = ({ transactions, goals, familyMembers, currentDate, setCurrent
                 </div>
                 <div style={styles.card}>
                      <p style={styles.cardLabel}>Top Gasto</p>
-                     <div style={styles.topCategoryContainer}>
-                        <div>
-                           <p style={styles.topCategoryName}>{topExpenseCategory.category}</p>
-                           <p style={styles.topCategoryAmount}>{formatCurrency(topExpenseCategory.amount)}</p>
-                        </div>
-                    </div>
+                     <p style={styles.topCategoryName}>{topExpenseCategory.category}</p>
+                     <p style={styles.topCategoryAmount}>{formatCurrency(topExpenseCategory.amount)}</p>
                 </div>
             </div>
 
             <div style={styles.card}>
                 <p style={styles.cardLabel}>Gastos Individuais</p>
                 <div style={styles.individualSpendingContainer}>
-                    {familyMembers.length > 0 && (
-                        <>
-                            <div style={styles.individualSpendingItem}>
-                                <span>{member1Name}</span>
-                                {member1Expenses > member2Expenses && <span style={styles.spendingTag}>Gastou mais</span>}
-                                <strong>{formatCurrency(member1Expenses)}</strong>
-                            </div>
-                            <div style={styles.individualSpendingItem}>
-                                <span>{member2Name}</span>
-                                {member2Expenses > member1Expenses && <span style={styles.spendingTag}>Gastou mais</span>}
-                                <strong>{formatCurrency(member2Expenses)}</strong>
-                            </div>
-                        </>
-                    )}
+                    {familyMembers.map(member => (
+                        <div key={member.id} style={styles.individualSpendingItem}>
+                            <span>{member.display_name}</span>
+                            {topSpender === member.display_name && <span style={styles.spendingTag}>Gastou mais</span>}
+                            <strong>{formatCurrency(individualExpenses[member.display_name] || 0)}</strong>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -549,45 +540,16 @@ const Transactions = ({ setTransactions, allSortedTransactions, session, familyI
                     onSubmit={handleAddOrUpdateTransaction}
                     style={styles.form}
                 >
-                    <input
-                        style={styles.input}
-                        name="description"
-                        placeholder="Descrição"
-                        required
-                        defaultValue={editingTransaction?.description || ''}
-                    />
-                    <input
-                        style={styles.input}
-                        name="amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="Valor (R$)"
-                        required
-                        defaultValue={editingTransaction?.amount || ''}
-                    />
-                    <select
-                        style={styles.input}
-                        name="category"
-                        required
-                        defaultValue={editingTransaction?.category || currentCategories[0]}
-                    >
+                    <input style={styles.input} name="description" placeholder="Descrição" required defaultValue={editingTransaction?.description || ''} />
+                    <input style={styles.input} name="amount" type="number" step="0.01" placeholder="Valor (R$)" required defaultValue={editingTransaction?.amount || ''} />
+                    <select style={styles.input} name="category" required defaultValue={editingTransaction?.category || currentCategories[0]}>
                         {currentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={styles.grid}>
-                        <select
-                            style={styles.input}
-                            name="person"
-                            required
-                            defaultValue={editingTransaction?.person || loggedInUser?.display_name}
-                        >
+                        <select style={styles.input} name="person" required defaultValue={editingTransaction?.person || loggedInUser?.display_name}>
                             {personOptions.map(name => <option key={name} value={name}>{name}</option>)}
                         </select>
-                        <select
-                            style={styles.input}
-                            name="type"
-                            required
-                            defaultValue={editingTransaction?.type || 'variável'}
-                        >
+                        <select style={styles.input} name="type" required defaultValue={editingTransaction?.type || 'variável'}>
                             <option value="variável">Variável</option>
                             <option value="fixo">Fixo</option>
                         </select>
@@ -596,11 +558,7 @@ const Transactions = ({ setTransactions, allSortedTransactions, session, familyI
                         {editingTransaction ? 'Salvar Alterações' : 'Adicionar'}
                     </button>
                     {editingTransaction && (
-                        <button
-                            type="button"
-                            onClick={() => setEditingTransaction(null)}
-                            style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}
-                        >
+                        <button type="button" onClick={() => setEditingTransaction(null)} style={{...styles.button, background: 'var(--text-light)', marginTop: '0.5rem'}}>
                             Cancelar Edição
                         </button>
                     )}
@@ -790,22 +748,8 @@ const Goals = ({ goals, setGoals, transactions, familyId }: { goals: Goal[], set
 
             <div style={styles.card}>
                 <form onSubmit={handleAddOrUpdateGoal} style={{...styles.form, gap: '1rem'}}>
-                    <input
-                        name="name"
-                        placeholder="Nome da Meta (ex: Viagem de Férias)"
-                        style={styles.input}
-                        required
-                        defaultValue={editingGoal ? editingGoal.name : ''}
-                    />
-                    <input
-                        name="amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="Valor do Objetivo (R$)"
-                        style={styles.input}
-                        required
-                        defaultValue={editingGoal ? editingGoal.targetAmount : ''}
-                    />
+                    <input name="name" placeholder="Nome da Meta (ex: Viagem de Férias)" style={styles.input} required defaultValue={editingGoal ? editingGoal.name : ''} />
+                    <input name="amount" type="number" step="0.01" placeholder="Valor do Objetivo (R$)" style={styles.input} required defaultValue={editingGoal ? editingGoal.targetAmount : ''} />
                     <button type="submit" style={styles.button}>
                         {editingGoal ? 'Atualizar Meta' : 'Adicionar Nova Meta'}
                     </button>
@@ -969,7 +913,7 @@ const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
     familyId: string | null
 }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([
-        { id: '1', sender: 'ai', text: `Olá! Sou a Fin, sua assistente financeira. Como posso ajudar com suas análises e dúvidas hoje?` }
+        { id: '1', sender: 'ai', text: `Olá! Sou a Fin, sua assistente financeira. Como posso ajudar?` }
     ]);
     const [input, setInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -990,35 +934,12 @@ const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
 
         try {
             const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    action: {
-                        type: Type.STRING,
-                        enum: [ "updateTransaction", "deleteTransaction", "answerQuery" ],
-                    },
-                    transactionUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING }, description: { type: Type.STRING }, } } } },
-                    transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-                    answer: { type: Type.STRING }
-                }
+                type: Type.OBJECT, properties: { action: { type: Type.STRING, enum: [ "updateTransaction", "deleteTransaction", "answerQuery" ], }, transactionUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING }, description: { type: Type.STRING }, } } } }, transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, answer: { type: Type.STRING } }
             };
 
-            const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Seu papel é ser CONSULTIVA.
-            ### REGRAS DE EXECUÇÃO:
-            1.  NUNCA ADICIONE NADA: Se o usuário pedir para adicionar algo, instrua-o a usar a aba correspondente.
-            2.  FOCO NA CONSULTORIA: Sua principal função é fornecer insights com base nos dados.
-            ### DADOS FINANCEIROS ATUAIS PARA ANÁLISE:
-            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 10))}
-            - Metas Atuais: ${JSON.stringify(goals)}
-            - Orçamentos Atuais: ${JSON.stringify(budgets)}
-            ### MENSAGEM ATUAL DO USUÁRIO PARA ANÁLISE:
-            "${input}"`;
+            const prompt = `Você é a "Fin", uma assessora financeira de casais. Seja consultiva e prestativa. REGRAS: 1. NUNCA adicione dados. Se pedirem, instrua a usar a aba correta. 2. FOQUE em dar insights sobre os dados. DADOS: Transações: ${JSON.stringify(transactions.slice(0, 10))}, Metas: ${JSON.stringify(goals)}, Orçamentos: ${JSON.stringify(budgets)}. MENSAGEM DO USUÁRIO: "${input}"`;
 
-            const result = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: prompt,
-                config: { responseMimeType: "application/json", responseSchema: responseSchema },
-            });
-
+            const result = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt, config: { responseMimeType: "application/json", responseSchema: responseSchema }, });
             const responseJson = JSON.parse(result.text.trim());
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
@@ -1029,13 +950,12 @@ const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
                         const transactionToUpdate = transactions.find(t => t.description.toLowerCase().includes(identifier.description.toLowerCase()));
                         if (transactionToUpdate) {
                             const { data, error } = await supabase.from('transactions').update(updates).eq('id', transactionToUpdate.id).eq('family_id', familyId).select();
-                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; console.error(error); }
+                            if (error) { aiResponseText = `Erro ao atualizar a transação.`; }
                             else if (data) {
                                 setTransactions(prev => prev.map(t => t.id === transactionToUpdate.id ? data[0] : t));
-                                const changedFields = Object.keys(updates).join(', ');
-                                aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}". O(s) campo(s) '${changedFields}' foi/foram alterado(s).`;
+                                aiResponseText = `Ok, atualizei a transação "${transactionToUpdate.description}".`;
                             }
-                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}' para atualizar.`; }
+                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${identifier.description}'.`; }
                     }
                     break;
                 case 'deleteTransaction':
@@ -1044,22 +964,19 @@ const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
                         const transactionToDelete = transactions.find(t => t.description.toLowerCase().includes(description.toLowerCase()));
                         if (transactionToDelete) {
                             const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id).eq('family_id', familyId);
-                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; console.error(error); }
+                            if (error) { aiResponseText = `Erro ao excluir a transação '${description}'.`; }
                             else {
                                 setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
-                                aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída com sucesso.`;
+                                aiResponseText = `Ok, a transação "${transactionToDelete.description}" foi excluída.`;
                             }
-                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}' para excluir.`; }
+                        } else { aiResponseText = `Não encontrei uma transação recente com a descrição parecida com '${description}'.`; }
                     }
                     break;
                 case 'answerQuery':
-                    if (responseJson.answer) {
-                       aiResponseText = responseJson.answer;
-                    }
+                    if (responseJson.answer) { aiResponseText = responseJson.answer; }
                     break;
             }
             setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 2).toString(), sender: 'ai', text: aiResponseText }]);
-
         } catch (error) {
             console.error("Error with Gemini API:", error);
             const errorMessage = "Desculpe, estou com problemas para me conectar. Tente novamente mais tarde.";
@@ -1068,43 +985,12 @@ const Chat = ({ transactions, setTransactions, goals, budgets, familyId }: {
     };
 
     return (
-        <div style={styles.pageChat}>
-            <div style={styles.chatContainer}>
-                {messages.map(msg => (
-                    <div key={msg.id} style={
-                        msg.sender === 'user' ? styles.userMessage :
-                        msg.sender === 'system' ? styles.systemMessage : styles.aiMessage
-                    }>
-                        {msg.isLoading ? (
-                            <div style={styles.loadingDots}>
-                                <div style={styles.dot1}></div>
-                                <div style={styles.dot2}></div>
-                                <div style={styles.dot3}></div>
-                            </div>
-                        ) : msg.text}
-                    </div>
-                ))}
-                 <div ref={chatEndRef} />
-            </div>
-            <form onSubmit={handleSendMessage} style={styles.chatInputForm}>
-                <input
-                    type="text"
-                    style={styles.chatInput}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Digite sua mensagem..."
-                    disabled={!ai}
-                />
-                <button type="submit" style={styles.chatSendButton} disabled={!ai || !input.trim()}>{Icons.send}</button>
-            </form>
-            {!ai && <p style={styles.apiKeyWarning}>API Key do Google GenAI não configurada. O chat está desativado.</p>}
-        </div>
+        <div style={styles.pageChat}><div style={styles.chatContainer}>{messages.map(msg => (<div key={msg.id} style={ msg.sender === 'user' ? styles.userMessage : msg.sender === 'system' ? styles.systemMessage : styles.aiMessage }>{msg.isLoading ? (<div style={styles.loadingDots}><div style={styles.dot1}></div><div style={styles.dot2}></div><div style={styles.dot3}></div></div>) : msg.text}</div>))}<div ref={chatEndRef} /></div><form onSubmit={handleSendMessage} style={styles.chatInputForm}><input type="text" style={styles.chatInput} value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua mensagem..." disabled={!ai} /><button type="submit" style={styles.chatSendButton} disabled={!ai || !input.trim()}>{Icons.send}</button></form>{!ai && <p style={styles.apiKeyWarning}>API Key do Google GenAI não configurada. O chat está desativado.</p>}</div>
     );
 };
 
 
 // --- MAIN APP COMPONENT ---
-
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [familyId, setFamilyId] = useState<string | null>(null);
@@ -1131,32 +1017,23 @@ const App = () => {
   useEffect(() => {
     const fetchData = async () => {
         if (session?.user) {
-            // Etapa 1: Buscar o perfil do usuário para obter o family_id
             const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('family_id')
-                .eq('id', session.user.id)
-                .single();
+                .from('profiles').select('family_id').eq('id', session.user.id).single();
 
             if (profileError || !profileData) {
                 console.error('Error fetching profile or profile not found:', profileError);
-                // Lidar com o caso de um usuário que ainda não tem um perfil (ex: redirecionar para uma página de configuração)
                 return;
             }
 
             const currentFamilyId = profileData.family_id;
             setFamilyId(currentFamilyId);
 
-            // Etapa 2: Buscar todos os membros da família
             const { data: membersData, error: membersError } = await supabase
-                .from('profiles')
-                .select('id, display_name')
-                .eq('family_id', currentFamilyId);
+                .from('profiles').select('id, display_name').eq('family_id', currentFamilyId);
             
             if (membersError) console.error('Error fetching family members:', membersError);
             else setFamilyMembers(membersData || []);
 
-            // Etapa 3: Buscar todos os dados financeiros da família
             const { data: transactionsData, error: transactionsError } = await supabase
                 .from('transactions').select('*').eq('family_id', currentFamilyId).order('date', { ascending: false });
             if (transactionsError) console.error('Error fetching transactions:', transactionsError);
@@ -1217,35 +1094,19 @@ const App = () => {
 
   const renderScreen = () => {
     switch (activeScreen) {
-      case 'dashboard':
-        return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
-      case 'transactions':
-        return <Transactions setTransactions={setTransactions} allSortedTransactions={allSortedTransactions} session={session} familyId={familyId} familyMembers={familyMembers} />;
-      case 'multiple':
-        return <MultipleTransactions setTransactions={setTransactions} familyId={familyId} familyMembers={familyMembers} />;
-      case 'reports':
-        return <Reports transactions={filteredTransactions} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
-      case 'goals':
-        return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} familyId={familyId} />;
-      case 'budgets':
-        return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} familyId={familyId}/>;
-      case 'chat':
-        return <Chat transactions={allSortedTransactions} setTransactions={setTransactions} goals={goals} budgets={budgets} familyId={familyId} />;
-      default:
-        return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
+      case 'dashboard': return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
+      case 'transactions': return <Transactions setTransactions={setTransactions} allSortedTransactions={allSortedTransactions} session={session} familyId={familyId} familyMembers={familyMembers} />;
+      case 'multiple': return <MultipleTransactions setTransactions={setTransactions} familyId={familyId} familyMembers={familyMembers} />;
+      case 'reports': return <Reports transactions={filteredTransactions} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
+      case 'goals': return <Goals goals={goals} setGoals={setGoals} transactions={allSortedTransactions} familyId={familyId} />;
+      case 'budgets': return <Budgets budgets={budgets} setBudgets={setBudgets} transactions={filteredTransactions} familyId={familyId}/>;
+      case 'chat': return <Chat transactions={allSortedTransactions} setTransactions={setTransactions} goals={goals} budgets={budgets} familyId={familyId} />;
+      default: return <Dashboard transactions={filteredTransactions} goals={goals} familyMembers={familyMembers} currentDate={currentDate} setCurrentDate={setCurrentDate} />;
     }
   };
 
   const NavItem = ({ screen, label, icon }: { screen: string, label: string, icon: React.ReactNode }) => (
-    <button
-      className="nav-item-btn"
-      style={activeScreen === screen ? styles.navButtonActive : styles.navButton}
-      onClick={() => setActiveScreen(screen)}
-      aria-label={label}
-    >
-      <div style={styles.navIcon}>{icon}</div>
-      <div style={styles.navLabel} className="nav-label">{label}</div>
-    </button>
+    <button className="nav-item-btn" style={activeScreen === screen ? styles.navButtonActive : styles.navButton} onClick={() => setActiveScreen(screen)} aria-label={label}><div style={styles.navIcon}>{icon}</div><div style={styles.navLabel} className="nav-label">{label}</div></button>
   );
 
   return (
@@ -1272,430 +1133,72 @@ const App = () => {
 
 // --- STYLES ---
 const styles: { [key: string]: React.CSSProperties } = {
-    // Layout
-    mainContent: {
-        flex: 1,
-        overflowY: 'auto',
-        padding: '1rem',
-        paddingBottom: '70px',
-    },
-    page: {
-        animation: 'fadeIn 0.5s ease-in-out',
-    },
-    pageTitle: {
-        fontSize: '1.75rem',
-        fontWeight: 700,
-        marginBottom: '1rem',
-        color: 'var(--text-color)',
-    },
-     subPageTitle: {
-        fontSize: '1.25rem',
-        fontWeight: 600,
-        marginTop: '2rem',
-        marginBottom: '1rem',
-        color: 'var(--text-color)'
-    },
-     // Login
-    loginContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        padding: '1rem',
-        backgroundColor: 'var(--background-color)',
-        position: 'relative',
-    },
-    loginThemeToggleButton: {
-        position: 'absolute',
-        top: '1rem',
-        right: '1rem',
-        background: 'var(--card-background)',
-        border: '1px solid var(--border-color)',
-        color: 'var(--text-light)',
-        padding: '0.5rem',
-        borderRadius: '50%',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10
-    },
-    loginBox: {
-        textAlign: 'center',
-        backgroundColor: 'var(--card-background)',
-        padding: '2.5rem',
-        borderRadius: '24px',
-        boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-        width: '100%',
-        maxWidth: '400px',
-    },
-    loginTitle: {
-        margin: 0,
-        fontSize: '1.2rem',
-        color: 'var(--text-light)',
-        fontWeight: 500,
-    },
-    loginAppName: {
-        margin: '0.25rem 0 1.5rem 0',
-        fontSize: '2rem',
-        color: 'var(--primary-color)',
-        fontWeight: 700,
-    },
-    // Header
-    header: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '0.75rem 1rem',
-        borderBottom: '1px solid var(--border-color)',
-        flexShrink: 0,
-    },
-    headerWelcome: {
-        fontWeight: 500,
-        fontSize: '1rem',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-    },
-    logoutButton: {
-        background: 'none',
-        border: 'none',
-        color: 'var(--text-light)',
-        padding: '0.5rem',
-        borderRadius: '50%',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: '0.5rem',
-    },
-    themeToggleButton: {
-        background: 'none',
-        border: 'none',
-        color: 'var(--text-light)',
-        padding: '0.5rem',
-        borderRadius: '50%',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    // Month Navigator
-    monthNavigator: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: 'var(--background-color)',
-        borderRadius: '12px',
-        padding: '0.25rem',
-        marginBottom: '1rem',
-    },
-    monthNavButton: {
-        background: 'none',
-        border: 'none',
-        color: 'var(--text-color)',
-        cursor: 'pointer',
-        padding: '0.5rem',
-        borderRadius: '8px',
-    },
-    monthDisplay: {
-        margin: 0,
-        fontSize: '1rem',
-        fontWeight: 600,
-        textTransform: 'capitalize',
-    },
-    // Cards
-    card: {
-        backgroundColor: 'var(--card-background)',
-        borderRadius: '16px',
-        padding: '1rem',
-        marginBottom: '1rem',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-        transition: 'background-color 0.3s ease',
-    },
-    cardLabel: {
-        margin: '0 0 0.5rem 0',
-        color: 'var(--text-light)',
-        fontSize: '0.9rem',
-    },
-    cardValue: {
-        margin: '0',
-        fontSize: '2.25rem',
-        fontWeight: 700,
-        color: 'var(--text-color)',
-    },
-    cardValueSmall: {
-        margin: '0.25rem 0 0 0',
-        fontSize: '1.5rem',
-        fontWeight: 600,
-        color: 'var(--text-color)',
-    },
-    grid: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '1rem',
-    },
-    // Navigation
-    nav: {
-        display: 'flex',
-        justifyContent: 'space-around',
-        padding: '0.5rem 0',
-        borderTop: '1px solid var(--border-color)',
-        backgroundColor: 'var(--card-background)',
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        maxWidth: '500px',
-        margin: '0 auto',
-        zIndex: 100,
-    },
-    navButton: {
-        background: 'none',
-        border: 'none',
-        color: 'var(--text-light)',
-        cursor: 'pointer',
-        textAlign: 'center',
-        padding: '0.25rem',
-        borderRadius: '8px',
-        transition: 'all 0.2s ease',
-        flex: 1,
-    },
-    navButtonActive: {
-        background: 'none',
-        border: 'none',
-        color: 'var(--primary-color)',
-        cursor: 'pointer',
-        textAlign: 'center',
-        padding: '0.25rem',
-        borderRadius: '8px',
-        transition: 'all 0.2s ease',
-        flex: 1,
-    },
+    mainContent: { flex: 1, overflowY: 'auto', padding: '1rem', paddingBottom: '70px', },
+    page: { animation: 'fadeIn 0.5s ease-in-out', },
+    pageTitle: { fontSize: '1.75rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-color)', },
+    subPageTitle: { fontSize: '1.25rem', fontWeight: 600, marginTop: '2rem', marginBottom: '1rem', color: 'var(--text-color)' },
+    loginContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '1rem', backgroundColor: 'var(--background-color)', position: 'relative', },
+    loginThemeToggleButton: { position: 'absolute', top: '1rem', right: '1rem', background: 'var(--card-background)', border: '1px solid var(--border-color)', color: 'var(--text-light)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+    loginBox: { textAlign: 'center', backgroundColor: 'var(--card-background)', padding: '2.5rem', borderRadius: '24px', boxShadow: '0 8px 30px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px', },
+    loginTitle: { margin: 0, fontSize: '1.2rem', color: 'var(--text-light)', fontWeight: 500, },
+    loginAppName: { margin: '0.25rem 0 1.5rem 0', fontSize: '2rem', color: 'var(--primary-color)', fontWeight: 700, },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', flexShrink: 0, },
+    headerWelcome: { fontWeight: 500, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', },
+    logoutButton: { background: 'none', border: 'none', color: 'var(--text-light)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem', },
+    themeToggleButton: { background: 'none', border: 'none', color: 'var(--text-light)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', },
+    monthNavigator: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--background-color)', borderRadius: '12px', padding: '0.25rem', marginBottom: '1rem', },
+    monthNavButton: { background: 'none', border: 'none', color: 'var(--text-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '8px', },
+    monthDisplay: { margin: 0, fontSize: '1rem', fontWeight: 600, textTransform: 'capitalize', },
+    card: { backgroundColor: 'var(--card-background)', borderRadius: '16px', padding: '1rem', marginBottom: '1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: 'background-color 0.3s ease', },
+    cardLabel: { margin: '0 0 0.5rem 0', color: 'var(--text-light)', fontSize: '0.9rem', },
+    cardValue: { margin: '0', fontSize: '2.25rem', fontWeight: 700, color: 'var(--text-color)', },
+    cardValueSmall: { margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-color)', },
+    grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', },
+    nav: { display: 'flex', justifyContent: 'space-around', padding: '0.5rem 0', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--card-background)', position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: '500px', margin: '0 auto', zIndex: 100, },
+    navButton: { background: 'none', border: 'none', color: 'var(--text-light)', cursor: 'pointer', textAlign: 'center', padding: '0.25rem', borderRadius: '8px', transition: 'all 0.2s ease', flex: 1, },
+    navButtonActive: { background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textAlign: 'center', padding: '0.25rem', borderRadius: '8px', transition: 'all 0.2s ease', flex: 1, },
     navIcon: { height: '24px' },
     navLabel: { fontSize: '0.7rem', marginTop: '2px' },
-    // Dashboard Specific
-    topCategoryContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-    },
-    topCategoryName: {
-        margin: 0,
-        fontWeight: 600,
-        fontSize: '1rem',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-    },
-    topCategoryAmount: {
-        margin: '2px 0 0 0',
-        color: 'var(--text-light)',
-        fontSize: '0.9rem',
-        fontWeight: 500,
-    },
-    individualSpendingContainer: {
-        display: 'flex',
-        justifyContent: 'space-around',
-        gap: '1rem',
-    },
-    individualSpendingItem: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '0.25rem',
-    },
-    spendingTag: {
-        fontSize: '0.7rem',
-        color: 'var(--warning-color)',
-        fontWeight: 600,
-    },
-    dashboardGoalItem: {
-        marginBottom: '1rem',
-    },
-    dashboardGoalTitle: {
-        margin: '0 0 0.5rem 0',
-        fontWeight: 500,
-        fontSize: '1rem',
-    },
-    noDataText: {
-        textAlign: 'center',
-        color: 'var(--text-light)',
-        padding: '1rem',
-    },
-    // Transactions
-    toggleContainer: {
-        display: 'flex',
-        backgroundColor: 'var(--background-color)',
-        borderRadius: '14px',
-        padding: '4px',
-        marginBottom: '1rem',
-    },
-    toggleButton: {
-        flex: 1,
-        padding: '0.6rem',
-        border: 'none',
-        background: 'transparent',
-        color: 'var(--text-light)',
-        fontWeight: 600,
-        borderRadius: '12px',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-    },
-    toggleButtonActive: {
-        flex: 1,
-        padding: '0.6rem',
-        border: 'none',
-        background: 'var(--card-background)',
-        color: 'var(--primary-color)',
-        fontWeight: 600,
-        borderRadius: '12px',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-    },
+    topCategoryName: { margin: 0, fontWeight: 600, fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', },
+    topCategoryAmount: { margin: '2px 0 0 0', color: 'var(--text-light)', fontSize: '0.9rem', fontWeight: 500, },
+    individualSpendingContainer: { display: 'flex', justifyContent: 'space-around', gap: '1rem', },
+    individualSpendingItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', },
+    spendingTag: { fontSize: '0.7rem', color: 'var(--warning-color)', fontWeight: 600, },
+    dashboardGoalItem: { marginBottom: '1rem', },
+    dashboardGoalTitle: { margin: '0 0 0.5rem 0', fontWeight: 500, fontSize: '1rem', },
+    noDataText: { textAlign: 'center', color: 'var(--text-light)', padding: '1rem', },
+    toggleContainer: { display: 'flex', backgroundColor: 'var(--background-color)', borderRadius: '14px', padding: '4px', marginBottom: '1rem', },
+    toggleButton: { flex: 1, padding: '0.6rem', border: 'none', background: 'transparent', color: 'var(--text-light)', fontWeight: 600, borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s ease-in-out', },
+    toggleButtonActive: { flex: 1, padding: '0.6rem', border: 'none', background: 'var(--card-background)', color: 'var(--primary-color)', fontWeight: 600, borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s ease-in-out', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', },
     form: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-    input: {
-        padding: '0.85rem',
-        borderRadius: '12px',
-        border: '1px solid var(--border-color)',
-        backgroundColor: 'var(--background-color)',
-        fontSize: '1rem',
-        color: 'var(--text-color)',
-    },
-    button: {
-        padding: '0.85rem',
-        borderRadius: '12px',
-        border: 'none',
-        backgroundColor: 'var(--primary-color)',
-        color: 'white',
-        fontSize: '1rem',
-        fontWeight: 600,
-        cursor: 'pointer',
-    },
+    input: { padding: '0.85rem', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background-color)', fontSize: '1rem', color: 'var(--text-color)', },
+    button: { padding: '0.85rem', borderRadius: '12px', border: 'none', backgroundColor: 'var(--primary-color)', color: 'white', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', },
     transactionList: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-    transactionItem: {
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0.75rem',
-        backgroundColor: 'var(--card-background)',
-        borderRadius: '12px',
-    },
+    transactionItem: { display: 'flex', alignItems: 'center', padding: '0.75rem', backgroundColor: 'var(--card-background)', borderRadius: '12px', },
     transactionDetails: { display: 'flex', flexDirection: 'column', flex: 1, marginRight: '1rem' },
     transactionDesc: { fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' },
     transactionSub: { color: 'var(--text-light)', fontSize: '0.8rem', marginTop: '2px' },
     transactionAmount: { fontWeight: 600, fontSize: '1.1rem' },
-    // Reports
     reportItem: { display: 'flex', flexDirection: 'column', padding: '0.75rem 0' },
     reportItemDetails: { display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' },
-    // Goals & Budgets
     goalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     goalTitle: { margin: '0 0 0.5rem 0', fontWeight: 600, fontSize: '1.1rem' },
-    progressContainer: {
-        height: '20px',
-        backgroundColor: 'var(--border-color)',
-        borderRadius: '10px',
-        overflow: 'hidden',
-    },
-    progressContainerSmall: {
-        height: '8px',
-        backgroundColor: 'var(--border-color)',
-        borderRadius: '4px',
-        overflow: 'hidden',
-    },
-    progressBar: {
-        height: '100%',
-        backgroundColor: 'var(--primary-color)',
-        borderRadius: '10px',
-        transition: 'width 0.5s ease',
-    },
+    progressContainer: { height: '20px', backgroundColor: 'var(--border-color)', borderRadius: '10px', overflow: 'hidden', },
+    progressContainerSmall: { height: '8px', backgroundColor: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden', },
+    progressBar: { height: '100%', backgroundColor: 'var(--primary-color)', borderRadius: '10px', transition: 'width 0.5s ease', },
     goalProgressText: { margin: '0.5rem 0 0 0', color: 'var(--text-light)', textAlign: 'right', fontSize: '0.9rem' },
-    budgetTextContainer: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        marginTop: '0.5rem',
-        fontSize: '0.9rem',
-        color: 'var(--text-light)',
-    },
+    budgetTextContainer: { display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--text-light)', },
     aiInsight: { fontStyle: 'italic', color: 'var(--text-light)', minHeight: '1.2em', marginBottom: '1rem' },
-    // Chat
     pageChat: { display: 'flex', flexDirection: 'column', height: '100%', animation: 'fadeIn 0.5s ease-in-out' },
-    chatContainer: {
-        flex: 1,
-        overflowY: 'auto',
-        padding: '1rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-    },
-    userMessage: {
-        alignSelf: 'flex-end',
-        backgroundColor: 'var(--primary-color)',
-        color: 'white',
-        padding: '0.75rem 1.25rem',
-        borderRadius: '20px 20px 4px 20px',
-        maxWidth: '80%',
-        wordBreak: 'break-word',
-    },
-    aiMessage: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'var(--border-color)',
-        color: 'var(--text-color)',
-        padding: '0.75rem 1.25rem',
-        borderRadius: '20px 20px 20px 4px',
-        maxWidth: '80%',
-        wordBreak: 'break-word',
-    },
-    systemMessage: {
-        alignSelf: 'center',
-        backgroundColor: 'var(--warning-color)',
-        color: 'white',
-        padding: '0.5rem 1rem',
-        borderRadius: '12px',
-        fontSize: '0.8rem',
-    },
-    chatInputForm: {
-        display: 'flex',
-        padding: '0.5rem 1rem',
-        alignItems: 'center',
-        gap: '0.5rem',
-        backgroundColor: 'transparent',
-        borderTop: 'none',
-    },
-    chatInput: {
-        flex: 1,
-        border: '1px solid var(--border-color)',
-        padding: '0.75rem 1rem',
-        borderRadius: '20px',
-        backgroundColor: 'var(--card-background)',
-        color: 'var(--text-color)',
-    },
-    chatSendButton: {
-        background: 'var(--primary-color)',
-        border: 'none',
-        color: 'white',
-        cursor: 'pointer',
-        width: '40px',
-        height: '40px',
-        borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-    },
-    apiKeyWarning: {
-        textAlign: 'center',
-        padding: '0.5rem',
-        color: 'var(--danger-color)',
-        fontSize: '0.8rem'
-    },
-    loadingDots: {
-        display: 'flex',
-        gap: '4px',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '21px',
-    },
+    chatContainer: { flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', },
+    userMessage: { alignSelf: 'flex-end', backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '20px 20px 4px 20px', maxWidth: '80%', wordBreak: 'break-word', },
+    aiMessage: { alignSelf: 'flex-start', backgroundColor: 'var(--border-color)', color: 'var(--text-color)', padding: '0.75rem 1.25rem', borderRadius: '20px 20px 20px 4px', maxWidth: '80%', wordBreak: 'break-word', },
+    systemMessage: { alignSelf: 'center', backgroundColor: 'var(--warning-color)', color: 'white', padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.8rem', },
+    chatInputForm: { display: 'flex', padding: '0.5rem 1rem', alignItems: 'center', gap: '0.5rem', backgroundColor: 'transparent', borderTop: 'none', },
+    chatInput: { flex: 1, border: '1px solid var(--border-color)', padding: '0.75rem 1rem', borderRadius: '20px', backgroundColor: 'var(--card-background)', color: 'var(--text-color)', },
+    chatSendButton: { background: 'var(--primary-color)', border: 'none', color: 'white', cursor: 'pointer', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, },
+    apiKeyWarning: { textAlign: 'center', padding: '0.5rem', color: 'var(--danger-color)', fontSize: '0.8rem' },
+    loadingDots: { display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center', height: '21px', },
     dot1: { animation: 'typing-dot 1.5s infinite 0s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
     dot2: { animation: 'typing-dot 1.5s infinite 0.25s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
     dot3: { animation: 'typing-dot 1.5s infinite 0.5s', height: '8px', width: '8px', backgroundColor: 'var(--text-light)', borderRadius: '50%' },
