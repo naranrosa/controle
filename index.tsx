@@ -137,28 +137,47 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-
-    // 3. Função de Cadastro (SignUp) customizada
+    
+    // 3. A função handleSignUp completa
     const handleSignUp = async () => {
-        setLoading(true);
-        const { error } = await supabase.auth.signUp({
+        // Validação simples para garantir que o nome não está vazio.
+        // Isso ajuda a prevenir erros no trigger se a coluna 'display_name' for NOT NULL.
+        if (!name.trim()) {
+            alert("Por favor, preencha seu nome.");
+            return;
+        }
+    
+        setLoading(true); // Ativa o estado de carregamento para o botão
+    
+        const { data, error } = await supabase.auth.signUp({
             email: email,
             password: password,
             options: {
                 data: {
-                    // Isso envia o nome para o trigger do seu banco de dados!
+                    // Esta é a parte crucial.
+                    // A chave 'display_name' corresponde ao que seu trigger espera.
+                    // O valor 'name' vem do estado do formulário.
                     display_name: name
                 }
             }
         });
+    
         if (error) {
+            // Se houver um erro, exibe a mensagem para o usuário.
             alert("Erro no cadastro: " + error.message);
-        } else {
-            alert('Cadastro realizado! Verifique seu email para confirmar a conta.');
-            // Volta para a tela de login após o cadastro
-            setView('signIn');
+        } else if (data.user) {
+            // Se o cadastro for bem-sucedido, informa o usuário.
+            // A sessão do usuário 'data.session' pode ser nula se a confirmação de email estiver ativada.
+            alert('Cadastro realizado com sucesso! Verifique sua caixa de entrada para confirmar seu email.');
+            // Opcional: Você pode limpar os campos do formulário aqui se desejar
+            setName('');
+            setEmail('');
+            setPassword('');
+            // E redirecionar para a tela de login
+            // setView('signIn'); // (Se você tiver um estado 'view' para controlar a tela)
         }
-        setLoading(false);
+    
+        setLoading(false); // Desativa o estado de carregamento
     };
 
     // 4. Função de Login (SignIn) customizada
