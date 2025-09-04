@@ -1,68 +1,70 @@
-/* =============================================== */
-/* === ESTILOS PARA LAYOUT DESKTOP (SIDEBAR) === */
-/* =============================================== */
 
-/* Aplica estas regras apenas em telas com 768px de largura ou mais */
-@media (min-width: 768px) {
-
-  /* 1. Define o layout geral da aplicação para ter uma sidebar */
-  .app-layout {
-    flex-direction: row; /* Coloca a sidebar e o conteúdo lado a lado */
-    max-width: 1400px; /* Define uma largura máxima para o layout em telas muito grandes */
-    margin: 0 auto; /* Centraliza a aplicação na tela */
-  }
-
-  /* 2. Transforma a barra de navegação em uma sidebar vertical */
-  .app-nav {
-    /* Sobrescreve os estilos do React para remover a posição fixa */
-    position: static !important;
-    
-    /* Organiza os itens verticalmente */
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch; /* Faz os botões esticarem na largura */
-
-    /* Define o tamanho e a aparência da sidebar */
-    width: 240px; /* Largura fixa */
-    height: 100vh; /* Altura total da tela */
-    padding: 1rem 0 !important;
-    border-top: none !important;
-    border-right: 1px solid var(--border-color);
-
-    /* Limpa outras propriedades da versão mobile */
-    max-width: none;
-    margin: 0;
-  }
-
-  /* 3. Ajusta a área de conteúdo principal */
-  .main-content-wrapper {
-    flex: 1; /* Faz esta área ocupar todo o espaço restante */
-    height: 100vh;
-  }
-  
-  /* 4. Ajusta o preenchimento da área onde as telas são renderizadas */
-  .app-main {
-     padding: 1.5rem 2rem !important; /* Melhora o espaçamento no desktop */
-  }
-  
-  /* 5. Estiliza os botões dentro da sidebar */
-  .nav-item-btn {
+.app-layout {
     display: flex;
-    flex-direction: row; /* Alinha ícone e texto lado a lado */
-    align-items: center;
-    justify-content: flex-start; /* Alinha o conteúdo à esquerda */
-    gap: 0.75rem; /* Espaço entre o ícone e o texto */
-    
-    flex: none !important; /* Impede que o botão cresça */
-    text-align: left;
-    margin: 0.25rem 1rem;
-    padding: 0.75rem 1.5rem !important;
-  }
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
 
-  /* 6. Garante que o texto (label) do botão sempre apareça */
-  .nav-label {
-    display: block !important;
-    font-size: 1rem !important;
-    margin-top: 0; /* Remove a margem da versão mobile */
-  }
+.main-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Important for scroll management */
+}
+
+/* --- Desktop & Tablet Layout --- */
+@media (min-width: 769px) {
+    #root {
+        max-width: none;
+        box-shadow: none;
+        background-color: var(--background-color);
+    }
+
+    .app-layout {
+        flex-direction: row;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .app-layout > .app-nav {
+        /* Override inline styles from the JS object */
+        position: static !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        width: 240px;
+        height: 100%;
+        padding: 2rem 0 !important;
+        border-top: none !important;
+        border-right: 1px solid var(--border-color);
+        flex-shrink: 0;
+        max-width: none !important;
+        margin: 0 !important;
+        left: unset !important;
+        right: unset !important;
+        bottom: unset !important;
+        background-color: var(--card-background) !important;
+        z-index: 100;
+    }
+    
+    .app-nav .nav-item-btn {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        text-align: left !important;
+        padding: 0.75rem 1.5rem !important;
+        margin: 0.25rem 1rem;
+        flex: none !important; /* Override mobile flex-grow */
+    }
+
+    .app-nav .nav-item-btn .nav-label {
+        margin-top: 0 !important;
+        margin-left: 0.75rem;
+        font-size: 1rem !important;
+    }
+    
+    .main-content-wrapper .app-main {
+        padding: 1.5rem 2rem !important;
+    }
 }
