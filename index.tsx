@@ -144,7 +144,6 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
         if (error) {
             alert("Erro no login: " + error.message);
         }
-        // O onAuthStateChange no App cuidará do redirecionamento
         setLoading(false);
     };
 
@@ -158,22 +157,8 @@ const LoginScreen = ({ theme, toggleTheme }: { theme: Theme, toggleTheme: () => 
                 <h1 style={styles.loginAppName}>Financeiro a Dois</h1>
 
                 <form onSubmit={handleSignIn} style={{...styles.form, gap: '1rem', marginTop: '2rem'}}>
-                    <input
-                        style={styles.input}
-                        type="email"
-                        placeholder="seu@email.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
-                    <input
-                        style={styles.input}
-                        type="password"
-                        placeholder="Sua senha"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
+                    <input style={styles.input} type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <input style={styles.input} type="password" placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} required />
                     <button type="submit" style={styles.button} disabled={loading}>
                         {loading ? 'Entrando...' : 'Entrar'}
                     </button>
@@ -254,7 +239,6 @@ const Dashboard = ({ transactions, goals, familyMembers, currentDate, setCurrent
         return expenses;
     }, [transactions, familyMembers]);
 
-    // Lógica para determinar quem gastou mais
     const spendingEntries = Object.entries(individualExpenses);
     const topSpender = spendingEntries.length > 1 ? spendingEntries.reduce((a, b) => a[1] > b[1] ? a : b)[0] : null;
 
@@ -1168,7 +1152,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     cardValue: { margin: '0', fontSize: '2.25rem', fontWeight: 700, color: 'var(--text-color)', },
     cardValueSmall: { margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-color)', },
     grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', },
-    nav: { display: 'flex', justifyContent: 'space-around', padding: '0.5rem 0', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--card-background)', position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: '500px', margin: '0 auto', zIndex: 100, },
+    nav: { display: 'flex', justifyContent: 'space-around', padding: '0.5rem 0', borderTop: '1px solid var(--border-color)', backgroundColor: 'var(--card-background)', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, },
     navButton: { background: 'none', border: 'none', color: 'var(--text-light)', cursor: 'pointer', textAlign: 'center', padding: '0.25rem', borderRadius: '8px', transition: 'all 0.2s ease', flex: 1, },
     navButtonActive: { background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textAlign: 'center', padding: '0.25rem', borderRadius: '8px', transition: 'all 0.2s ease', flex: 1, },
     navIcon: { height: '24px' },
