@@ -137,3 +137,25 @@
     margin-top: 0; /* Remove a margem da versão mobile */
   }
 }
+/* Adicione isto ao seu arquivo CSS principal, como o index.css */
+
+/* 
+  1. Remove as margens padrão do navegador e garante que o fundo 
+     da página inteira corresponda ao fundo do seu aplicativo.
+*/
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--background-color); /* Garante que não haja barras cinzas */
+}
+
+/* 
+  2. Encontra o contêiner principal do layout e o força a ocupar a tela inteira,
+     removendo a largura máxima e as margens de centralização.
+*/
+.app-layout, .main-content-wrapper {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
