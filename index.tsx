@@ -329,7 +329,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
     const handleParseText = () => {
         const lines = inputText.split('\n').filter(line => line.trim() !== '');
         const regex = /(.*?):\s*R?\$\s*([\d,.]+)/;
-        
+
         const newParsed = lines.map(line => {
             const match = line.match(regex);
             if (match) {
@@ -346,7 +346,7 @@ const MultipleTransactions = ({ setTransactions, session, currentUser }: { setTr
             }
             return null;
         }).filter(item => item !== null) as Omit<Transaction, 'id' | 'user_id' | 'date'>[];
-        
+
         setParsedTransactions(newParsed);
     };
 
@@ -684,9 +684,9 @@ const Budgets = ({ budgets, setBudgets, transactions, session }: { budgets: Budg
                 console.error("Error adding budget:", error);
             } else if (data) {
                 setBudgets([...budgets, data[0]]);
-            }
+                e.currentTarget.reset();
         }
-        e.currentTarget.reset();
+
     };
 
     return (
@@ -770,84 +770,60 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                     action: {
                         type: Type.STRING,
                         enum: [
-                            // Ações de adicionar transações foram removidas
                             "updateTransaction", "deleteTransaction",
-                            "addGoal", "updateGoal", "deleteGoal", 
+                            "addGoal", "updateGoal", "deleteGoal",
                             "addBudget", "updateBudget", "deleteBudget",
                             "answerQuery"
                         ],
                         description: "A ação a ser tomada com base na análise da mensagem."
                     },
-                    // --- Seção de Gerenciamento de Transações ---
-                    transactionUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, description: { type: Type.STRING }, } }
-                        }
-                    },
+                    transactionUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, category: { type: Type.STRING, enum: allCategories }, person: { type: Type.STRING, enum: ["Natan", "Jussara", "Ambos"] }, description: { type: Type.STRING }, } } } },
                     transactionIdentifier: { type: Type.OBJECT, properties: { description: { type: Type.STRING } } },
-
-                    // --- Seção de Metas (Goals) ---
                     goal: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } },
-                    goalUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } },
-                            updates: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } }
-                        }
-                    },
+                    goalUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser atualizada." } } }, updates: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, targetAmount: { type: Type.NUMBER } } } } },
                     goalIdentifier: { type: Type.OBJECT, properties: { name: { type: Type.STRING, description: "Nome da meta a ser excluída." } } },
-
-                    // --- Seção de Orçamentos (Budgets) ---
                     budget: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories }, amount: { type: Type.NUMBER } } },
-                    budgetUpdate: {
-                        type: Type.OBJECT,
-                        properties: {
-                            identifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } },
-                            updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER } } }
-                        }
-                    },
+                    budgetUpdate: { type: Type.OBJECT, properties: { identifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser atualizado." } } }, updates: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER } } } } },
                     budgetIdentifier: { type: Type.OBJECT, properties: { category: { type: Type.STRING, enum: expenseCategories, description: "Categoria do orçamento a ser excluído." } } },
-
-                    // --- Seção de Respostas (Consultoria) ---
                     answer: { type: Type.STRING, description: "Resposta em texto para a pergunta do usuário, atuando como uma assessora financeira." }
                 }
             };
-                        const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a GERENCIAR suas finanças e fornecer CONSULTORIA. Você NÃO é responsável por adicionar novas transações.
+                      const conversationHistory = messages.slice(-4).map(msg => `${msg.sender === 'user' ? 'Usuário' : 'Você'}: ${msg.text}`).join('\n');
+
+            const prompt = `Você é a "Fin", uma assessora financeira especialista em finanças para casais. Sua personalidade é prestativa, inteligente e clara. Sua principal função é ajudar o casal a GERENCIAR suas finanças e fornecer CONSULTORIA.
+
+            ### HISTÓRICO DA CONVERSA RECENTE:
+            ${conversationHistory}
 
             ### SEU KIT DE FERRAMENTAS (AÇÕES):
-            - **Gerenciar Transações:** 'updateTransaction', 'deleteTransaction'. (APENAS editar e excluir).
+            - **Gerenciar Transações:** 'updateTransaction', 'deleteTransaction'.
             - **Gerenciar Metas:** 'addGoal', 'updateGoal', 'deleteGoal'.
             - **Gerenciar Orçamentos/Tetos:** 'addBudget', 'updateBudget', 'deleteBudget'.
-            - **Consultoria Financeira:** 'answerQuery' (para todas as perguntas e análises).
+            - **Consultoria/Conversa:** 'answerQuery'.
 
             ### REGRAS DE EXECUÇÃO:
-            1.  **NUNCA ADICIONE TRANSAÇÕES:** Se o usuário pedir para adicionar uma despesa, instrua-o a usar a aba "Lançar" ou "Múltiplas". Ex: "Para adicionar novas despesas, por favor, use a funcionalidade 'Lançar' ou 'Múltiplas' no aplicativo. Aqui no chat, posso te ajudar a editar ou excluir algo já lançado!".
-            2.  **Atuar como Assessora:** Ao usar 'answerQuery', use os dados fornecidos para dar respostas inteligentes. Analise os números e dê conselhos práticos.
+            1.  **MANTENHA O CONTEXTO:** Use o histórico da conversa para entender perguntas de acompanhamento. Se o usuário fornecer uma informação, lembre-se dela na próxima interação.
+            2.  **NUNCA ADICIONE TRANSAÇÕES:** Se o usuário pedir para adicionar uma despesa, instrua-o a usar a aba "Lançar" ou "Múltiplas".
+            3.  **EXTRAIA TODA A INFORMAÇÃO:** Se o usuário fornecer todos os dados de uma vez (ex: nome e valor da meta), use a ação correta imediatamente. Não faça perguntas desnecessárias.
 
             ### EXEMPLOS PRÁTICOS:
 
-            #### Gerenciar Transações Existentes:
-            - Usuário: "a despesa supermercado foi R$ 450 na verdade"
-            - JSON: { "action": "updateTransaction", "transactionUpdate": { "identifier": { "description": "supermercado" }, "updates": { "amount": 450 } } }
-            - Usuário: "exclua o gasto com cinema"
-            - JSON: { "action": "deleteTransaction", "transactionIdentifier": { "description": "cinema" } }
+            #### Gerenciar Metas:
+            - Usuário: "quero definir de meta trocar de carro: 5000"
+            - JSON: { "action": "addGoal", "goal": { "name": "Trocar de carro", "targetAmount": 5000 } }
+            - Usuário: "aumente a meta da Viagem para Disney para 15000"
+            - JSON: { "action": "updateGoal", "goalUpdate": { "identifier": { "name": "Viagem para Disney" }, "updates": { "targetAmount": 15000 } } }
 
-            #### Gerenciar Metas e Orçamentos:
-            - Usuário: "crie uma meta de R$ 5000 para a reforma da casa"
-            - JSON: { "action": "addGoal", "goal": { "name": "Reforma da casa", "targetAmount": 5000 } }
-            
-            #### Atuando como Assessora Financeira (Consultoria):
+            #### Atuando como Assessora (Consultoria):
             - Usuário: "estamos gastando muito com lazer?"
-            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos, a categoria 'Lazer' representa 20% das suas despesas totais, o que é um pouco acima da média. Podemos pensar em criar um teto de gastos para essa categoria para ajudar a controlar melhor." }
+            - JSON: { "action": "answerQuery", "answer": "Analisando seus gastos, a categoria 'Lazer' representa 20% das suas despesas totais. Podemos pensar em criar um teto de gastos para essa categoria para ajudar a controlar melhor." }
 
-            ### DADOS ATUAIS DO CASAL:
-            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 20))}
+            ### DADOS FINANCEIROS ATUAIS:
+            - Histórico de Transações: ${JSON.stringify(transactions.slice(0, 10))}
             - Metas Atuais: ${JSON.stringify(goals)}
             - Orçamentos Atuais: ${JSON.stringify(budgets)}
 
-            ### MENSAGEM DO USUÁRIO PARA ANÁLISE:
+            ### MENSAGEM ATUAL DO USUÁRIO PARA ANÁLISE:
             "${input}"`;
 
             const result = await ai.models.generateContent({
@@ -860,8 +836,6 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
             let aiResponseText = "Não consegui entender. Poderia tentar de novo?";
 
                                     switch (responseJson.action) {
-                // Os cases 'addTransaction' e 'addMultipleTransactions' foram removidos daqui.
-
                 case 'updateTransaction':
                     if (responseJson.transactionUpdate?.identifier?.description && responseJson.transactionUpdate?.updates) {
                         const { identifier, updates } = responseJson.transactionUpdate;
@@ -910,7 +884,7 @@ const Chat = ({ transactions, setTransactions, goals, setGoals, budgets, setBudg
                             const { data, error } = await supabase.from('goals').update(updates).eq('id', goalToUpdate.id).select();
                             if (error) { aiResponseText = "Erro ao atualizar a meta."; console.error(error); }
                             else if (data) {
-                                setGoals(prev => prev.map(g => g.id === goalToUpdate.id ? data[0] : g));
+                                setGoals(prev => prev.map(g => g.id === goalToUpdate.id ? data[0] : t));
                                 aiResponseText = `Meta "${goalToUpdate.name}" atualizada com sucesso!`;
                             }
                         } else { aiResponseText = `Não encontrei a meta "${identifier.name}" para atualizar.`; }
